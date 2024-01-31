@@ -1,0 +1,39 @@
+{{- if .Values.networkPolicy.create }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sda-db-cnpg-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: sda-db-cnpg
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - ports:
+    - port: 5432
+      protocol: TCP
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: cloudnativepg # Namespace where the operator is deployed
+
+  egress:
+  - ports:
+    - port: 6443
+      protocol: TCP
+    to:
+    - ipBlock:
+        cidr: 10.43.0.1/32
+    - ipBlock:
+        cidr: 10.16.62.14/32
+    - ipBlock:
+        cidr: 10.16.62.15/32
+    - ipBlock:
+        cidr: 10.16.62.16/32
+    - ipBlock:
+        cidr: 10.16.62.17/32
+    - ipBlock:
+        cidr: 10.16.62.18/32
+{{- end }}

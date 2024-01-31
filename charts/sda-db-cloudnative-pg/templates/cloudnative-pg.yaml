@@ -1,0 +1,978 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: sda-db-cnpg
+spec:
+  instances: 1
+  imageName: 'cerit.io/cloudnative-pg/postgresql:15.0'
+
+  primaryUpdateStrategy: unsupervised
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: sda-db-superuser-secret
+
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1"
+    limits:
+      memory: "4Gi"
+      cpu: "2"
+
+  storage:
+    size: 10Gi
+    storageClass: nfs-csi
+
+  bootstrap:
+    initdb:
+      database: sda
+      postInitApplicationSQL:
+      - |
+        CREATE SCHEMA sda;
+        SET search_path TO sda;
+        -- ENUMS
+        CREATE TYPE checksum_algorithm AS ENUM ('MD5', 'SHA256', 'SHA384', 'SHA512');
+        CREATE TYPE checksum_source AS ENUM ('UPLOADED', 'ARCHIVED', 'UNENCRYPTED');
+        -- The schema_version table is used to keep track of migrations
+        CREATE TABLE  dbschema_version (
+               version          INTEGER PRIMARY KEY,
+               applied          TIMESTAMP WITH TIME ZONE,
+               description      VARCHAR(1024)
+        );
+        INSERT INTO dbschema_version
+        VALUES (0, now(), 'Created with version'),
+               (1, now(), 'Noop version'),
+               (2, now(), 'Added decrypted_checksum et al'),
+               (3, now(), 'Reorganized out views/tables'),
+               (4, now(), 'Refactored schema'),
+               (5, now(), 'Add field for correlation ids'),
+               (6, now(), 'Add created_at field to datasets'),
+               (7, now(), 'Add permissions to mapper to files'),
+               (8, now(), 'Add ingestion functions'),
+               (9, now(), 'Add dataset event log'),
+               (10, now(), 'Create Inbox user');
+        -- Datasets are used to group files, and permissions are set on the dataset
+        -- level
+        CREATE TABLE datasets (
+            id                  SERIAL PRIMARY KEY,
+            stable_id           TEXT UNIQUE,
+            title               TEXT,
+            description         TEXT,
+            created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
+        );
+        -- `files` is the main table of the schema, holding the file paths, encryption
+        -- header, and stable id.
+        CREATE TABLE files (
+            id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            stable_id            TEXT UNIQUE,
+            submission_user      TEXT,
+            submission_file_path TEXT DEFAULT '' NOT NULL,
+            submission_file_size BIGINT,
+            archive_file_path    TEXT DEFAULT '' NOT NULL,
+            archive_file_size    BIGINT,
+            decrypted_file_size  BIGINT,
+            backup_path          TEXT,
+            header               TEXT,
+            encryption_method    TEXT,
+            -- Table Audit / Logs
+            created_by           NAME DEFAULT CURRENT_USER, -- Postgres users
+            last_modified_by     NAME DEFAULT CURRENT_USER, --
+            created_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
+            last_modified        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
+            CONSTRAINT unique_ingested UNIQUE(submission_file_path, archive_file_path)
+        );
+        -- To allow for multiple checksums per file, we use a dedicated table for it
+        CREATE TABLE checksums (
+            id                  SERIAL PRIMARY KEY,
+            file_id             UUID REFERENCES files(id),
+            checksum            TEXT,
+            type                checksum_algorithm,
+            source              checksum_source,
+            CONSTRAINT unique_checksum UNIQUE(file_id, type, source)
+        );
+        -- Dataset and references are identifiers used to access and reference the
+        -- dataset, such as DOIs. There can be multiple identifiers for each file or
+        -- dataset, and these may change over time.
+        CREATE TABLE dataset_references (
+            id                  SERIAL PRIMARY KEY,
+            dataset_id          INT REFERENCES datasets(id),
+            reference_id        TEXT NOT NULL,
+            reference_scheme    TEXT NOT NULL, -- E.g. “DOI” or “EGA”
+            created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
+            expired_at          TIMESTAMP
+        );
+        CREATE TABLE file_references (
+            file_id             UUID REFERENCES files(id),
+            reference_id        TEXT NOT NULL,
+            reference_scheme    TEXT NOT NULL, -- E.g. “DOI” or “EGA”
+            created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
+            expired_at          TIMESTAMP
+        );
+        -- connects files to datasets
+        CREATE TABLE file_dataset (
+            id                  SERIAL PRIMARY KEY,
+            file_id             UUID REFERENCES files(id) NOT NULL,
+            dataset_id          INT REFERENCES datasets(id) NOT NULL,
+            CONSTRAINT unique_file_dataset UNIQUE(file_id, dataset_id)
+        );
+        -- This table is used to define events for file event logging.
+        CREATE TABLE file_events (
+            id                  SERIAL PRIMARY KEY,
+            title               VARCHAR(64) UNIQUE, -- short name of the action
+            description         TEXT
+        );
+        -- These are the default file events to log.
+        INSERT INTO file_events(id,title,description)
+        VALUES ( 5, 'registered'  , 'Upload to the inbox has started'),
+               (10, 'uploaded'    , 'Upload to the inbox has finished'),
+               (20, 'submitted'   , 'User has submitted the file to the archive'),
+               (30, 'ingested'    , 'File information has been added to the database'),
+               (40, 'archived'    , 'File has been moved to the archive'),
+               (50, 'verified'    , 'Checksums have been verified in the archived file'),
+               (60, 'backed up'   , 'File has been backed up'),
+               (70, 'ready'       , 'File is ready for access requests'),
+               (80, 'downloaded'  , 'Downloaded by user'),
+               ( 0, 'error'       , 'An Error occurred, check the error table'),
+               ( 1, 'disabled'    , 'Disables the file for all actions'),
+               ( 2, 'enabled'     , 'Reenables a disabled file');
+        -- Keeps track of all events for the files, with timestamps and user_ids.
+        CREATE TABLE file_event_log (
+            id                  SERIAL PRIMARY KEY,
+            file_id             UUID REFERENCES files(id),
+            event               TEXT REFERENCES file_events(title),
+            correlation_id      UUID, -- Correlation ID in the message's header
+            user_id             TEXT, -- Elixir user id (or pipeline-step for ingestion,
+                                      -- etc.)
+            details             JSONB,  -- This is my solution to fields such as
+                                        -- download.requests.client_ip,
+                                        -- download.success.bytes, etc. is it any good?
+                                        -- Well, it's simpler, but harder to see what
+                                        -- data is available... What do we prefer?
+            message             JSONB, -- The rabbitMQ message that initiated the file event
+            started_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp(),
+            finished_at         TIMESTAMP,
+            success             BOOLEAN,
+            error               TEXT
+        );
+        -- This table is used to define events for dataset event logging.
+        CREATE TABLE dataset_events (
+            id          SERIAL PRIMARY KEY,
+            title       VARCHAR(64) UNIQUE, -- short name of the action
+            description TEXT
+        );
+        -- These are the default dataset events to log.
+        INSERT INTO dataset_events(id,title,description)
+        VALUES (10, 'registered', 'Register a dataset to receive file accession IDs mappings.'),
+               (20, 'released'  , 'The dataset is released on this date'),
+               (30, 'deprecated', 'The dataset is deprecated on this date');
+        -- Keeps track of all events for the datasets, with timestamps.
+        CREATE TABLE dataset_event_log (
+            id         SERIAL PRIMARY KEY,
+            dataset_id TEXT REFERENCES datasets(stable_id),
+            event      TEXT REFERENCES dataset_events(title),
+            message    JSONB, -- The rabbitMQ message that initiated the dataset event
+            event_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
+        );
+        SET search_path TO sda;
+        -- When there is an update, update the last_modified and last_modified_by
+        -- fields on the files table.
+        CREATE FUNCTION files_updated()
+        RETURNS TRIGGER AS $files_updated$
+        BEGIN
+            NEW.last_modified = clock_timestamp();
+            NEW.last_modified_by = CURRENT_USER;
+          RETURN NEW;
+        END;
+        $files_updated$ LANGUAGE plpgsql;
+        CREATE TRIGGER files_last_modified
+            BEFORE UPDATE ON sda.files
+            FOR EACH ROW
+            EXECUTE PROCEDURE files_updated();
+        -- Function for registering files on upload
+        CREATE FUNCTION register_file(submission_file_path TEXT, submission_user TEXT)
+        RETURNS TEXT AS $register_file$
+        DECLARE
+            file_ext TEXT;
+            file_uuid UUID;
+        BEGIN
+            -- Upsert file information. we're not interested in restarted uploads so old
+            -- overwritten files that haven't been ingested are updated instead of
+            -- inserting a new row.
+            INSERT INTO sda.files( submission_file_path, submission_user, encryption_method )
+            VALUES( submission_file_path, submission_user, 'CRYPT4GH' )
+                ON CONFLICT ON CONSTRAINT unique_ingested
+                DO UPDATE SET submission_file_path = EXCLUDED.submission_file_path,
+                              submission_user = EXCLUDED.submission_user,
+                              encryption_method = EXCLUDED.encryption_method
+                RETURNING id INTO file_uuid;
+            -- We add a new event for every registration though, as this might help for
+            -- debugging.
+            INSERT INTO sda.file_event_log( file_id, event, user_id )
+            VALUES (file_uuid, 'registered', submission_user);
+            RETURN file_uuid;
+        END;
+        $register_file$ LANGUAGE plpgsql;
+        CREATE FUNCTION set_archived(file_uuid UUID, corr_id UUID, file_path TEXT, file_size BIGINT, inbox_checksum_value TEXT, inbox_checksum_type TEXT)
+        RETURNS void AS $set_archived$
+        BEGIN
+            UPDATE sda.files SET archive_file_path = file_path, archive_file_size = file_size WHERE id = file_uuid;
+            INSERT INTO sda.checksums(file_id, checksum, type, source)
+            VALUES(file_uuid, inbox_checksum_value, upper(inbox_checksum_type)::sda.checksum_algorithm, upper('UPLOADED')::sda.checksum_source);
+            INSERT INTO sda.file_event_log(file_id, event, correlation_id) VALUES(file_uuid, 'archived', corr_id);
+        END;
+        $set_archived$ LANGUAGE plpgsql;
+        CREATE FUNCTION set_verified(file_uuid UUID, corr_id UUID, archive_checksum TEXT, archive_checksum_type TEXT, decrypted_size BIGINT, decrypted_checksum TEXT, decrypted_checksum_type TEXT)
+        RETURNS void AS $set_verified$
+        BEGIN
+            UPDATE sda.files SET decrypted_file_size = decrypted_size WHERE id = file_uuid;
+            INSERT INTO sda.checksums(file_id, checksum, type, source)
+            VALUES(file_uuid, archive_checksum, upper(archive_checksum_type)::sda.checksum_algorithm, upper('ARCHIVED')::sda.checksum_source);
+            INSERT INTO sda.checksums(file_id, checksum, type, source)
+            VALUES(file_uuid, decrypted_checksum, upper(decrypted_checksum_type)::sda.checksum_algorithm, upper('UNENCRYPTED')::sda.checksum_source);
+            INSERT INTO sda.file_event_log(file_id, event, correlation_id) VALUES(file_uuid, 'verified', corr_id);
+        END;
+        $set_verified$ LANGUAGE plpgsql;
+        --
+        -- This schema acts as a wrapper to the legacy local_ega schema.
+        --
+        CREATE SCHEMA local_ega;
+        SET search_path TO local_ega;
+        -- the version table needs to be here for the migrations to trigger properly
+        CREATE VIEW dbschema_version AS
+            SELECT
+                version,
+                applied,
+                description
+            FROM sda.dbschema_version;
+        -- this version still uses the storage type
+        CREATE TYPE storage AS ENUM ('S3', 'POSIX');
+        -- file status is replaced by file events
+        CREATE VIEW status AS
+            SELECT
+                id,
+                UPPER(title) AS code,
+                description
+            FROM sda.file_events;
+        -- archive encryption is a TEXT field in the sda schema.
+        CREATE VIEW archive_encryption AS
+            SELECT
+                DISTINCT encryption_method AS mode,
+                '' AS description
+            FROM sda.files;
+        -- table for matching old (integer) id's to new uuid id's
+        CREATE TABLE IF NOT EXISTS main_to_files (
+            main_id SERIAL PRIMARY KEY,
+            files_id UUID
+        );
+        -- create trigger function for making sure that the main_to_files table stays
+        -- updated.
+        CREATE FUNCTION files_insert()
+        RETURNS TRIGGER AS $files_insert$
+        BEGIN
+            INSERT INTO
+                local_ega.main_to_files(files_id)
+                VALUES(NEW.id);
+            RETURN NEW;
+        END;
+        $files_insert$ LANGUAGE plpgsql;
+        CREATE TRIGGER main_to_files_insert
+            AFTER INSERT ON sda.files
+            FOR EACH ROW
+            EXECUTE PROCEDURE files_insert();
+        -- Translation table for file status values
+        CREATE TABLE status_translation (
+            id SERIAL PRIMARY KEY,
+            legacy_value TEXT,
+            new_value TEXT
+        );
+        INSERT INTO status_translation (legacy_value, new_value)
+            VALUES  ('INIT', 'uploaded'),
+                    ('IN_INGESTION', 'submitted'),
+                    ('COMPLETED', 'verified');
+        -- main is where most of the data is, but it matches pretty well with the new
+        -- files table.
+        CREATE VIEW main AS
+            SELECT
+                m.main_id AS id,
+                stable_id,
+                COALESCE((SELECT legacy_value FROM local_ega.status_translation WHERE new_value = l.event), UPPER(l.event)) AS status,
+                submission_file_path AS submission_file_path,
+                substring(submission_file_path from '\.(.*)') AS submission_file_extension,
+                sc.checksum AS submission_file_calculated_checksum,
+                sc.type AS submission_file_calculated_checksum_type,
+                submission_file_size,
+                submission_user,
+                archive_file_path AS archive_file_reference,
+                NULL AS archive_file_type,
+                archive_file_size,
+                ac.checksum AS archive_file_checksum,
+                ac.type AS archive_file_checksum_type,
+                decrypted_file_size,
+                uc.checksum AS decrypted_file_checksum,
+                uc.type AS decrypted_file_checksum_type,
+                encryption_method,
+                1 AS version,
+                header,
+                created_by,
+                last_modified_by,
+                created_at,
+                last_modified
+            FROM sda.files f
+            JOIN main_to_files m
+            ON f.id = m.files_id
+            LEFT JOIN (SELECT file_id,
+                              (ARRAY_AGG(event ORDER BY started_at DESC))[1] AS event
+                        FROM sda.file_event_log
+                        GROUP BY file_id) l
+            ON f.id = l.file_id
+            LEFT JOIN (SELECT file_id, checksum, type
+                    FROM sda.checksums
+                   WHERE source = 'UPLOADED') sc
+            ON f.id = sc.file_id
+            LEFT JOIN (SELECT file_id, checksum, type
+                    FROM sda.checksums
+                   WHERE source = 'ARCHIVED') ac
+            ON f.id = ac.file_id
+            LEFT JOIN (SELECT file_id, checksum, type
+                    FROM sda.checksums
+                   WHERE source = 'UNENCRYPTED') uc
+            ON f.id = uc.file_id;
+        -- Create a trigger to hijack inserts on main
+        CREATE FUNCTION main_insert()
+        RETURNS TRIGGER AS $main_insert$
+            #variable_conflict use_column
+            DECLARE
+                file_id  UUID;
+            BEGIN
+                -- insert bulk data into sda.files
+                INSERT INTO sda.files (
+                    stable_id,
+                    submission_user,
+                    submission_file_path,
+                    submission_file_size,
+                    archive_file_path,
+                    archive_file_size,
+                    decrypted_file_size,
+                    backup_path,
+                    header,
+                    encryption_method,
+                    created_at,
+                    created_by,
+                    last_modified,
+                    last_modified_by
+                    ) VALUES (
+                        NEW.stable_id,
+                        NEW.submission_user,
+                        NEW.submission_file_path,
+                        NEW.submission_file_size,
+                        COALESCE(NEW.archive_file_reference, ''),
+                        NEW.archive_file_size,
+                        NEW.decrypted_file_size,
+                        NULL,
+                        NEW.header,
+                        NEW.encryption_method,
+                        COALESCE(NEW.created_at, clock_timestamp()),
+                        COALESCE(NEW.created_by, CURRENT_USER),
+                        COALESCE(NEW.last_modified, clock_timestamp()),
+                        COALESCE(NEW.last_modified_by, CURRENT_USER)
+                    )
+                    RETURNING id INTO file_id;
+                -- update status names if needed
+                IF NEW.status IN (SELECT legacy_value FROM local_ega.status_translation)
+                THEN
+                    SELECT new_value
+                      FROM local_ega.status_translation
+                     WHERE legacy_value = NEW.status
+                      INTO NEW.status;
+                END IF;
+                NEW.status = lower(NEW.status);
+                -- if we have a status, create a log event
+                IF NEW.status IS NOT NULL
+                THEN
+                    INSERT INTO sda.file_event_log (file_id, event, user_id)
+                    VALUES (file_id, NEW.status, NEW.submission_user);
+                END IF;
+                -- if there are checksums, insert them into the sda.checksums table
+                IF NEW.submission_file_calculated_checksum IS NOT NULL
+                THEN
+                    INSERT INTO sda.checksums (file_id, checksum, type, source)
+                    VALUES (file_id,
+                            NEW.submission_file_calculated_checksum,
+                            NEW.submission_file_calculated_checksum_type,
+                            'UPLOADED');
+                END IF;
+                IF NEW.archive_file_checksum IS NOT NULL
+                THEN
+                    INSERT INTO sda.checksums (file_id, checksum, type, source)
+                    VALUES (file_id,
+                            NEW.archive_file_checksum,
+                            NEW.archive_file_checksum_type,
+                            'ARCHIVED');
+                END IF;
+                IF NEW.decrypted_file_checksum IS NOT NULL
+                THEN
+                    INSERT INTO sda.checksums (file_id, checksum, type, source)
+                    VALUES (file_id,
+                            NEW.decrypted_file_checksum,
+                            NEW.decrypted_file_checksum_type,
+                            'UNENCRYPTED');
+                END IF;
+                -- update id
+                SELECT main_id
+                    FROM local_ega.main_to_files
+                    WHERE files_id = file_id
+                    INTO NEW.id;
+                RETURN NEW;
+            END;
+        $main_insert$ LANGUAGE plpgsql;
+        CREATE TRIGGER main_insert_trigger
+            INSTEAD OF INSERT ON local_ega.main
+            FOR EACH ROW EXECUTE PROCEDURE main_insert();
+        CREATE FUNCTION main_update()
+        RETURNS TRIGGER AS $main_update$
+            #variable_conflict use_column
+            DECLARE
+                file_id  UUID;
+            BEGIN
+                SELECT files_id
+                    FROM local_ega.main_to_files
+                    WHERE main_id = OLD.id
+                    INTO file_id;
+                -- insert bulk data into sda.files
+                UPDATE sda.files SET
+                    stable_id = NEW.stable_id,
+                    submission_user = NEW.submission_user,
+                    submission_file_path = NEW.submission_file_path,
+                    submission_file_size = NEW.submission_file_size,
+                    archive_file_path = COALESCE(NEW.archive_file_reference, ''),
+                    archive_file_size = NEW.archive_file_size,
+                    decrypted_file_size = NEW.decrypted_file_size,
+                    header = NEW.header,
+                    encryption_method = NEW.encryption_method,
+                    created_at = COALESCE(NEW.created_at, clock_timestamp()),
+                    created_by = COALESCE(NEW.created_by, CURRENT_USER),
+                    last_modified = COALESCE(NEW.last_modified, clock_timestamp()),
+                    last_modified_by = COALESCE(NEW.last_modified_by, CURRENT_USER)
+                    WHERE id = file_id;
+                -- update status names if needed
+                IF NEW.status IN (SELECT legacy_value FROM local_ega.status_translation)
+                THEN
+                    SELECT new_value
+                      FROM local_ega.status_translation
+                     WHERE legacy_value = NEW.status
+                      INTO NEW.status;
+                END IF;
+                NEW.status = lower(NEW.status);
+                -- if we have a status, create a log event
+                IF NEW.status IS NOT NULL
+                THEN
+                    INSERT INTO sda.file_event_log (file_id, event, user_id)
+                    VALUES (file_id, NEW.status, NEW.submission_user);
+                END IF;
+                -- if there are checksums, insert them into the sda.checksums table
+                IF NEW.submission_file_calculated_checksum IS NOT NULL
+                THEN
+                    INSERT INTO sda.checksums (file_id, checksum, type, source)
+                    VALUES (file_id,
+                            NEW.submission_file_calculated_checksum,
+                            NEW.submission_file_calculated_checksum_type,
+                            'UPLOADED')
+                    ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = NEW.submission_file_calculated_checksum;
+                END IF;
+                IF NEW.archive_file_checksum IS NOT NULL
+                THEN
+                    INSERT INTO sda.checksums (file_id, checksum, type, source)
+                    VALUES (file_id,
+                            NEW.archive_file_checksum,
+                            NEW.archive_file_checksum_type,
+                            'ARCHIVED')
+                    ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = NEW.archive_file_checksum;
+                END IF;
+                IF NEW.decrypted_file_checksum IS NOT NULL
+                THEN
+                    INSERT INTO sda.checksums (file_id, checksum, type, source)
+                    VALUES (file_id,
+                            NEW.decrypted_file_checksum,
+                            NEW.decrypted_file_checksum_type,
+                            'UNENCRYPTED')
+                    ON CONFLICT ON CONSTRAINT unique_checksum DO UPDATE SET checksum = NEW.decrypted_file_checksum;
+                END IF;
+                -- update id
+                SELECT main_id
+                    FROM local_ega.main_to_files
+                    WHERE files_id = file_id
+                    INTO NEW.id;
+                RETURN NEW;
+            END;
+        $main_update$ LANGUAGE plpgsql;
+        CREATE TRIGGER main_update_trigger
+            INSTEAD OF UPDATE ON local_ega.main
+            FOR EACH ROW EXECUTE PROCEDURE main_update();
+        -- ##################################################
+        --                      ERRORS
+        -- ##################################################
+        CREATE VIEW local_ega.main_errors AS
+            SELECT
+                e.id AS id,
+                e.details->>'active' AS active,
+                mtf.main_id AS file_id,
+                e.details->>'hostname' AS hostname,
+                e.error AS error_type,
+                e.details->>'message' AS msg,
+                e.details->>'from_user' AS from_user,
+                e.started_at AS occured_at
+            FROM sda.file_event_log e
+            JOIN local_ega.main_to_files mtf
+              ON e.file_id = mtf.files_id
+            WHERE e.event = 'error';
+        -- ##################################################
+        --         Data-In View
+        -- ##################################################
+        --
+        CREATE VIEW local_ega.files AS
+        SELECT id,
+               submission_user                          AS elixir_id,
+               submission_file_path                     AS inbox_path,
+               submission_file_size                     AS inbox_filesize,
+               submission_file_calculated_checksum      AS inbox_file_checksum,
+               submission_file_calculated_checksum_type AS inbox_file_checksum_type,
+               status,
+               archive_file_reference                   AS archive_path,
+               archive_file_type                        AS archive_type,
+               archive_file_size                        AS archive_filesize,
+               archive_file_checksum                    AS archive_file_checksum,
+               archive_file_checksum_type               AS archive_file_checksum_type,
+               decrypted_file_size                      AS decrypted_file_size,
+               decrypted_file_checksum                  AS decrypted_file_checksum,
+               decrypted_file_checksum_type             AS decrypted_file_checksum_type,
+               stable_id,
+               header,  -- Crypt4gh specific
+               version,
+               created_at,
+               last_modified
+        FROM local_ega.main;
+        -- Insert into sda.files
+        CREATE FUNCTION insert_file(inpath        TEXT,
+                                    eid           TEXT)
+        RETURNS INT AS $insert_file$
+            #variable_conflict use_column
+            DECLARE
+                file_id  UUID;
+                main_id  INT;
+                file_ext TEXT;
+            BEGIN
+                -- Make a new insertion
+            INSERT INTO sda.files ( submission_file_path,
+                                    submission_user,
+                                    encryption_method) -- hard-code the archive_encryption
+            VALUES(inpath,eid,'CRYPT4GH') RETURNING id
+            INTO file_id;
+            INSERT INTO sda.file_event_log (
+                file_id,
+                event,
+                user_id
+            ) VALUES (file_id, 'uploaded', eid);
+            SELECT main_id
+              FROM local_ega.main_to_files
+             WHERE files_id = file_id
+              INTO main_id;
+            RETURN main_id;
+            END;
+        $insert_file$ LANGUAGE plpgsql;
+        -- Flag as READY, and mark older ingestion as deprecated (to clean up)
+        CREATE FUNCTION finalize_file(inpath        TEXT,
+                                      eid           TEXT,
+                                      checksum      TEXT,
+                                      checksum_type VARCHAR,
+                                      sid           TEXT)
+            RETURNS void AS $finalize_file$
+            #variable_conflict use_column
+            BEGIN
+            UPDATE local_ega.files
+            SET status = 'ready',
+                stable_id = sid
+            WHERE archive_file_checksum = checksum AND
+                  archive_file_checksum_type = upper(checksum_type)::sda.checksum_algorithm AND
+                  elixir_id = eid AND
+                  inbox_path = inpath AND
+                  status IN ('COMPLETED', 'BACKED UP');
+            END;
+        $finalize_file$ LANGUAGE plpgsql;
+        -- If the entry is marked disabled, it says disabled. No data race here.
+        CREATE FUNCTION is_disabled(fid INT)
+        RETURNS boolean AS $is_disabled$
+        #variable_conflict use_column
+        BEGIN
+           RETURN EXISTS(SELECT 1 FROM local_ega.files WHERE id = fid AND status = 'DISABLED');
+        END;
+        $is_disabled$ LANGUAGE plpgsql;
+        -- Just showing the current/active errors
+        CREATE VIEW local_ega.errors AS
+        SELECT id, file_id, hostname, error_type, msg, from_user, occured_at
+        FROM local_ega.main_errors
+        WHERE active::BOOLEAN = TRUE;
+        CREATE FUNCTION insert_error(fid        INT,
+                                     h          TEXT,
+                                     etype      TEXT,
+                                     msg        TEXT,
+                                     from_user  TEXT)
+            RETURNS void AS $insert_error$
+            BEGIN
+                INSERT INTO sda.file_event_log(
+                    file_id,
+                    event,
+                    user_id,
+                    details,
+                    error
+                ) VALUES (
+                    (SELECT files_id FROM local_ega.main_to_files WHERE main_id = fid),
+                    'error',
+                    from_user,
+                    concat('{"active": true',
+                           ', "hostname": "', h,
+                           '", "from_user": "', from_user,
+                           '", "message": "', msg, '"}')::json,
+                    etype
+                );
+            END;
+        $insert_error$ LANGUAGE plpgsql;
+        -- ##################################################
+        --              Session Keys Checksums
+        -- ##################################################
+        -- To keep track of already used session keys,
+        -- we record their checksum
+        CREATE TABLE local_ega.session_key_checksums_sha256 (
+               session_key_checksum      VARCHAR(128) NOT NULL, PRIMARY KEY(session_key_checksum), UNIQUE (session_key_checksum),
+               session_key_checksum_type sda.checksum_algorithm,
+               file_id                   INTEGER NOT NULL REFERENCES local_ega.main_to_files(main_id) ON DELETE CASCADE
+        );
+        -- Returns if the session key checksums are already found in the database
+        CREATE FUNCTION check_session_keys_checksums_sha256(checksums text[]) --local_ega.session_key_checksums.session_key_checksum%TYPE []
+            RETURNS boolean AS $check_session_keys_checksums_sha256$
+            #variable_conflict use_column
+            BEGIN
+            RETURN EXISTS(SELECT 1
+                              FROM local_ega.session_key_checksums_sha256 sk
+                          INNER JOIN local_ega.files f
+                      ON f.id = sk.file_id
+                      WHERE (f.status <> 'ERROR' AND f.status <> 'DISABLED') AND -- no data-race on those values
+                            sk.session_key_checksum = ANY(checksums));
+            END;
+        $check_session_keys_checksums_sha256$ LANGUAGE plpgsql;
+        -- ##########################################################################
+        --           For data-out
+        -- ##########################################################################
+        -- View on the archive files
+        CREATE VIEW local_ega.archive_files AS
+        SELECT id                          AS file_id
+             , stable_id                   AS stable_id
+             , archive_file_reference      AS archive_path
+             , archive_file_type           AS archive_type
+             , archive_file_size           AS archive_filesize
+             , archive_file_checksum       AS archive_file_checksum
+             , archive_file_checksum_type  AS archive_file_checksum_type
+             , header                      AS header
+             , version                     AS version
+        FROM local_ega.main
+        WHERE status = 'READY';
+        CREATE SCHEMA local_ega_download;
+        SET search_path TO local_ega_download;
+        CREATE TABLE local_ega_download.requests (
+           id                 SERIAL, PRIMARY KEY(id), UNIQUE (id),
+           -- which files was downloaded
+           file_id            INTEGER NOT NULL REFERENCES local_ega.main_to_files(main_id), -- No "ON DELETE CASCADE"
+           start_coordinate   BIGINT DEFAULT 0,
+           end_coordinate     BIGINT NULL, -- might be missing
+           -- user info
+           user_info         TEXT NULL,
+           client_ip         TEXT NULL,
+           created_at        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
+        );
+        -- Insert new request, and return some archive information
+        CREATE TYPE request_type AS (req_id                     INTEGER,
+                                     header                     TEXT,
+                         archive_path                           TEXT,
+                         archive_type                           local_ega.storage,
+                         file_size                              INTEGER,
+                         archive_file_checksum                  VARCHAR,
+                         archive_file_checksum_type             sda.checksum_algorithm);
+        CREATE FUNCTION make_request(sid    local_ega.main.stable_id%TYPE,
+                         uinfo  local_ega_download.requests.user_info%TYPE,
+                         cip    local_ega_download.requests.client_ip%TYPE,
+                                     scoord local_ega_download.requests.start_coordinate%TYPE DEFAULT 0,
+                                     ecoord local_ega_download.requests.end_coordinate%TYPE DEFAULT NULL)
+        RETURNS request_type AS $make_request$
+        #variable_conflict use_column
+        DECLARE
+             req  local_ega_download.request_type;
+             archive_rec local_ega.archive_files%ROWTYPE;
+             rid  INTEGER;
+        BEGIN
+             -- Find the file
+             SELECT * INTO archive_rec FROM local_ega.archive_files WHERE stable_id = sid LIMIT 1;
+             IF archive_rec IS NULL THEN
+                 RAISE EXCEPTION 'archived file not found for stable_id: % ', sid;
+             END IF;
+             -- New entry, or reuse old entry
+             INSERT INTO local_ega_download.requests (file_id, user_info, client_ip, start_coordinate, end_coordinate)
+             VALUES (archive_rec.file_id, uinfo, cip, scoord, ecoord)
+             ON CONFLICT (id) DO NOTHING
+             RETURNING local_ega_download.requests.id INTO rid;
+             -- result
+             req.req_id                    := rid;
+             req.header                    := archive_rec.header;
+             req.archive_path              := archive_rec.archive_path;
+             req.archive_type              := archive_rec.archive_type;
+             req.file_size                 := archive_rec.archive_filesize;
+             req.archive_file_checksum      := archive_rec.archive_file_checksum;
+             req.archive_file_checksum_type := archive_rec.archive_file_checksum_type;
+             RETURN req;
+        END;
+        $make_request$ LANGUAGE plpgsql;
+        CREATE TABLE local_ega_download.success (
+           id          SERIAL, PRIMARY KEY(id), UNIQUE (id),
+           -- which requested file it was
+           req_id      INTEGER NOT NULL REFERENCES local_ega_download.requests(id), -- No "ON DELETE CASCADE"
+           -- Stats
+           bytes       BIGINT DEFAULT 0,
+           speed       FLOAT  DEFAULT 0.0, -- bytes per seconds
+           -- table logs
+           occured_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
+        );
+        -- Mark a download as complete, and calculate the speed
+        CREATE FUNCTION download_complete(rid    local_ega_download.requests.id%TYPE,
+                                 dlsize local_ega_download.success.bytes%TYPE,
+                                s      local_ega_download.success.speed%TYPE)
+        RETURNS void AS $insert_success$
+        BEGIN
+             INSERT INTO local_ega_download.success(req_id,bytes,speed)
+             VALUES(rid,dlsize,s);
+        END;
+        $insert_success$ LANGUAGE plpgsql;
+        -- ##################################################
+        --                      ERRORS
+        -- ##################################################
+        CREATE TABLE local_ega_download.errors (
+           id          SERIAL, PRIMARY KEY(id), UNIQUE (id),
+           req_id      INTEGER NOT NULL REFERENCES local_ega_download.requests(id), -- ON DELETE CASCADE,
+           code        TEXT NOT NULL,
+           description TEXT NOT NULL,
+           -- where it happened
+           hostname    TEXT,
+           -- table logs
+           occured_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT clock_timestamp()
+        );
+        CREATE FUNCTION insert_error(rid    local_ega_download.requests.id%TYPE,
+                                     h      local_ega_download.errors.hostname%TYPE,
+                                     etype  local_ega_download.errors.code%TYPE,
+                                     msg    local_ega_download.errors.description%TYPE)
+        RETURNS void AS $insert_error$
+        BEGIN
+             INSERT INTO local_ega_download.errors (req_id,hostname,code,description)
+             VALUES (rid, h, etype, msg);
+        END;
+        $insert_error$ LANGUAGE plpgsql;
+        CREATE SCHEMA local_ega_ebi;
+        SET search_path TO local_ega_ebi;
+        -- Special view for EBI Data-Out
+        CREATE VIEW local_ega_ebi.file AS
+        SELECT stable_id                                AS file_id,
+               archive_file_reference                   AS file_name,
+               archive_file_reference                   AS file_path,
+               reverse(split_part(reverse(submission_file_path::text), '/'::text, 1)) AS display_file_name,
+               archive_file_size                        AS file_size,
+               archive_file_size                        AS archive_file_size,
+               NULL::text                               AS checksum,
+               NULL::text                               AS checksum_type,
+               NULL::text                               AS unencrypted_checksum,
+               NULL::text                               AS unencrypted_checksum_type,
+               archive_file_checksum                    AS archive_file_checksum,
+               archive_file_checksum_type               AS archive_file_checksum_type,
+               decrypted_file_size                      AS decrypted_file_size,
+               decrypted_file_checksum                  AS decrypted_file_checksum,
+               decrypted_file_checksum_type             AS decrypted_file_checksum_type,
+               status                                   AS file_status,
+               header                                   AS header
+        FROM local_ega.main
+        WHERE status = 'READY';
+        -- Relation File EGAF <-> Dataset EGAD
+        CREATE VIEW local_ega_ebi.filedataset AS
+            SELECT fd.id,
+                   mf.main_id AS file_id,
+                   d.stable_id AS dataset_stable_id
+            FROM sda.file_dataset fd
+            JOIN local_ega.main_to_files mf ON fd.file_id = mf.files_id
+            JOIN sda.datasets d ON fd.dataset_id = d.id;
+        -- Create triggers to hijack inserts and updates on filedataset
+        CREATE FUNCTION filedataset_insert()
+        RETURNS TRIGGER AS $filedataset_insert$
+            #variable_conflict use_column
+            BEGIN
+                INSERT INTO sda.datasets (stable_id)
+                    VALUES (NEW.dataset_stable_id)
+                    ON CONFLICT DO NOTHING;
+                INSERT INTO sda.file_dataset(file_id, dataset_id)
+                    VALUES ((SELECT files_id FROM local_ega.main_to_files WHERE main_id = NEW.file_id),
+                            (SELECT id FROM sda.datasets WHERE stable_id = NEW.dataset_stable_id))
+                    ON CONFLICT DO NOTHING;
+                RETURN NEW;
+            END;
+        $filedataset_insert$ LANGUAGE plpgsql;
+        CREATE TRIGGER filedataset_insert_trigger
+            INSTEAD OF INSERT ON local_ega_ebi.filedataset
+            FOR EACH ROW EXECUTE PROCEDURE filedataset_insert();
+        -- This view was created to be in sync with the entity eu.elixir.ega.ebi.downloader.domain.entity.FileDataset
+        -- which uses a view and has an @Id annotation in file_id
+        CREATE VIEW local_ega_ebi.file_dataset AS
+        SELECT m.stable_id AS file_id, dataset_stable_id as dataset_id FROM local_ega_ebi.filedataset fd
+        INNER JOIN local_ega.main m ON fd.file_id=m.id;
+        -- Relation File <-> Index File
+        CREATE TABLE local_ega_ebi.fileindexfile (
+               id       SERIAL, PRIMARY KEY(id), UNIQUE (id),
+               file_id     INTEGER NOT NULL REFERENCES local_ega.main_to_files (main_id) ON DELETE CASCADE, -- not stable_id
+               index_file_id TEXT,
+               index_file_reference      TEXT NOT NULL,     -- file path if POSIX, object id if S3
+               index_file_type           local_ega.storage  -- S3 or POSIX file system
+        );
+        -- This view was created to be in sync with the entity eu.elixir.ega.ebi.downloader.domain.entity.FileIndexFile
+        -- which seems to use a view and has an @Id annotation in file_id
+        CREATE VIEW local_ega_ebi.file_index_file AS
+        SELECT m.stable_id AS file_id, index_file_id FROM local_ega_ebi.fileindexfile fif
+        INNER JOIN local_ega.main m ON fif.file_id=m.id;
+        -- \connect lega
+        -- users
+        CREATE USER lega_in;
+        CREATE USER lega_out;
+        -- Roles are created with minimal permissions for each pipeline service, then
+        -- these roles are granted to database users. Roles are granted based on the
+        -- functions that are used in the sda-pipeline database interface.
+        -- Permissions have been laxed slightly by generally allowing SELECT and INSERT
+        -- on all fields, while UPDATES are limited as they are more destructive.
+        CREATE ROLE base;
+        GRANT USAGE ON SCHEMA sda TO base;
+        GRANT USAGE ON SCHEMA local_ega TO base;
+        GRANT SELECT ON sda.dbschema_version TO base;
+        GRANT SELECT ON local_ega.dbschema_version TO base;
+        CREATE ROLE inbox;
+        -- uses: db.InsertFile
+        GRANT USAGE ON SCHEMA sda TO inbox;
+        GRANT SELECT, INSERT, UPDATE ON sda.files TO inbox;
+        GRANT SELECT, INSERT ON sda.file_event_log TO inbox;
+        GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO inbox;
+        -- legacy schema
+        GRANT USAGE ON SCHEMA local_ega TO inbox;
+        GRANT INSERT, SELECT ON local_ega.main_to_files TO inbox;
+        GRANT USAGE, SELECT ON SEQUENCE local_ega.main_to_files_main_id_seq TO inbox;
+        CREATE ROLE ingest;
+        -- uses: db.InsertFile, db.StoreHeader, and db.SetArchived
+        GRANT USAGE ON SCHEMA sda TO ingest;
+        GRANT INSERT ON sda.files TO ingest;
+        GRANT SELECT ON sda.files TO ingest;
+        GRANT UPDATE ON sda.files TO ingest;
+        GRANT INSERT ON sda.checksums TO ingest;
+        GRANT UPDATE ON sda.checksums TO ingest;
+        GRANT SELECT ON sda.checksums TO ingest;
+        GRANT INSERT ON sda.file_events TO ingest;
+        GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO ingest;
+        GRANT INSERT ON sda.file_event_log TO ingest;
+        GRANT SELECT ON sda.file_event_log TO ingest;
+        GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO ingest;
+        -- legacy schema
+        GRANT USAGE ON SCHEMA local_ega TO ingest;
+        GRANT INSERT, SELECT ON local_ega.main TO ingest;
+        GRANT SELECT ON local_ega.status_translation TO ingest;
+        GRANT INSERT, SELECT ON local_ega.main_to_files TO ingest;
+        GRANT USAGE, SELECT ON SEQUENCE local_ega.main_to_files_main_id_seq TO ingest;
+        GRANT SELECT ON local_ega.files TO ingest;
+        GRANT UPDATE ON local_ega.files TO ingest;
+        GRANT UPDATE ON local_ega.main TO ingest;
+        --------------------------------------------------------------------------------
+        CREATE ROLE verify;
+        -- uses: db.GetHeader, and db.MarkCompleted
+        GRANT USAGE ON SCHEMA sda TO verify;
+        GRANT SELECT ON sda.files TO verify;
+        GRANT UPDATE ON sda.files TO verify;
+        GRANT INSERT ON sda.checksums TO verify;
+        GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO verify;
+        GRANT INSERT ON sda.file_event_log TO verify;
+        GRANT SELECT ON sda.file_event_log TO verify;
+        GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO verify;
+        -- legacy schema
+        GRANT USAGE ON SCHEMA local_ega TO verify;
+        GRANT SELECT ON local_ega.files TO verify;
+        GRANT UPDATE ON local_ega.files TO verify;
+        GRANT SELECT ON local_ega.main_to_files TO verify;
+        GRANT SELECT ON local_ega.status_translation TO verify;
+        GRANT UPDATE ON local_ega.main TO verify;
+        GRANT INSERT, SELECT, UPDATE ON sda.checksums TO verify;
+        GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO verify;
+        --------------------------------------------------------------------------------
+        CREATE ROLE finalize;
+        -- uses: db.MarkReady
+        GRANT USAGE ON SCHEMA sda TO finalize;
+        GRANT UPDATE ON sda.files TO finalize;
+        GRANT SELECT ON sda.files TO finalize;
+        GRANT SELECT ON sda.checksums TO finalize;
+        GRANT INSERT ON sda.file_event_log TO finalize;
+        GRANT SELECT ON sda.file_event_log TO finalize;
+        GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO finalize;
+        -- legacy schema
+        GRANT USAGE ON SCHEMA local_ega TO finalize;
+        GRANT SELECT ON local_ega.main_to_files TO finalize;
+        GRANT SELECT ON local_ega.status_translation TO finalize;
+        GRANT UPDATE ON local_ega.files TO finalize;
+        GRANT SELECT ON local_ega.files TO finalize;
+        GRANT INSERT, SELECT, UPDATE ON sda.checksums TO finalize;
+        GRANT USAGE, SELECT ON SEQUENCE sda.checksums_id_seq TO finalize;
+        --------------------------------------------------------------------------------
+        CREATE ROLE mapper;
+        -- uses: db.MapFilesToDataset
+        GRANT USAGE ON SCHEMA sda TO mapper;
+        GRANT INSERT ON sda.datasets TO mapper;
+        GRANT SELECT ON sda.datasets TO mapper;
+        GRANT USAGE, SELECT ON SEQUENCE sda.datasets_id_seq TO mapper;
+        GRANT SELECT ON sda.files TO mapper;
+        GRANT INSERT ON sda.file_event_log TO mapper;
+        GRANT INSERT ON sda.file_dataset TO mapper;
+        GRANT INSERT ON sda.dataset_event_log TO mapper;
+        GRANT USAGE, SELECT ON SEQUENCE sda.file_dataset_id_seq TO mapper;
+        GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO mapper;
+        GRANT USAGE, SELECT ON SEQUENCE sda.dataset_event_log_id_seq TO mapper;
+        -- legacy schema
+        GRANT USAGE ON SCHEMA local_ega TO mapper;
+        GRANT USAGE ON SCHEMA local_ega_ebi TO mapper;
+        GRANT SELECT ON local_ega.main_to_files TO mapper;
+        GRANT SELECT ON local_ega.archive_files TO mapper;
+        GRANT INSERT ON local_ega_ebi.filedataset TO mapper;
+        GRANT UPDATE ON local_ega.files TO mapper;
+        --------------------------------------------------------------------------------
+        CREATE ROLE sync;
+        -- uses: db.GetArchived
+        GRANT USAGE ON SCHEMA sda TO sync;
+        GRANT SELECT ON sda.files TO sync;
+        GRANT SELECT ON sda.file_event_log TO sync;
+        GRANT SELECT ON sda.checksums TO sync;
+        -- legacy schema
+        GRANT USAGE ON SCHEMA local_ega TO sync;
+        GRANT SELECT ON local_ega.files TO sync;
+        GRANT UPDATE ON local_ega.main TO sync;
+        --------------------------------------------------------------------------------
+        CREATE ROLE download;
+        GRANT USAGE ON SCHEMA sda TO download;
+        GRANT SELECT ON sda.files TO download;
+        GRANT SELECT ON sda.file_dataset TO download;
+        GRANT SELECT ON sda.checksums TO download;
+        GRANT SELECT ON sda.datasets TO download;
+        GRANT SELECT ON sda.file_event_log TO download;
+        -- legacy schema
+        GRANT USAGE ON SCHEMA local_ega TO download;
+        GRANT USAGE ON SCHEMA local_ega_ebi TO download;
+        GRANT SELECT ON local_ega.files TO download;
+        GRANT SELECT ON local_ega_ebi.file TO download;
+        GRANT SELECT ON local_ega_ebi.file_dataset TO download;
+        --------------------------------------------------------------------------------
+        -- lega_in permissions
+        GRANT base, ingest, verify, finalize, sync TO lega_in;
+        -- lega_out permissions
+        GRANT mapper, download TO lega_out;
+        GRANT base TO download, inbox, ingest, finalize, mapper, verify
