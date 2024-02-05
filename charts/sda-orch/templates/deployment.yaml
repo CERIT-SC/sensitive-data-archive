@@ -37,6 +37,9 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
     {{- if .Values.tls.permissions }}
       initContainers:
       - name: tls-init
@@ -44,7 +47,13 @@ spec:
         command: ["/bin/sh", "-c"]
         args: ["/bin/cp {{ include "tlsPath" . }}/* /tls/ && chown 1000:1000 /tls/* && chmod 0400 /tls/*"]
         securityContext:
+          privileged: false
+          runAsUser: 1000
+          runAsGroup: 1000
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: tls-certs
           mountPath: /tls-certs
@@ -60,7 +69,13 @@ spec:
         args: ["source {{ include "tlsPath" . }}/{{ .Values.envFile }} && supervisord --configuration /etc/supervisor.conf"]
       {{- end }}
         securityContext:
+          privileged: false
+          runAsUser: 1000
+          runAsGroup: 1000
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: LOG_LEVEL
           value: {{ .Values.logLevel | quote }}
