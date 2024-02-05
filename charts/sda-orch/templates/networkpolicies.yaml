@@ -51,6 +51,6 @@ spec:
           role: broker
     ports:
     - protocol: TCP
-      port: 5672
+      port: 5671
 ---
 {{- end }}

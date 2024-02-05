@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sda-db-cnpg-network-policy
+  name: sda-db-cnpg
 spec:
   podSelector:
     matchLabels:
@@ -17,8 +17,7 @@ spec:
   - from:
     - namespaceSelector:
         matchLabels:
-          kubernetes.io/metadata.name: cloudnativepg # Namespace where the operator is deployed
-
+          name: ega-ns
   egress:
   - ports:
     - port: 6443

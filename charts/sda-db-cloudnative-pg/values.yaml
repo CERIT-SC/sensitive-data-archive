@@ -1,2 +1,2 @@
 networkPolicy:
-  create: false
+  create: true
