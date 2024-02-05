@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	_ "github.com/lib/pq"
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"log"
 	"os"
 	"sync"
