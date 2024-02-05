@@ -23,11 +23,179 @@ spec:
   - to:
     - namespaceSelector:
         matchLabels:
-          name: kube-system
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
     ports:
     - protocol: UDP
       port: 53
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ template "sda.fullname" . }}-download
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-download
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    {{- if .Values.global.networkPolicy.databaseNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.databaseNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          cnpg.io/cluster: sda-db-cnpg
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    ports:
+    - protocol: TCP
+      port: 443
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ template "sda.fullname" . }}-finalize
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-finalize
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    {{- if .Values.global.networkPolicy.brokerNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.brokerNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          role: broker
+    ports:
+    - protocol: TCP
+      port: 5671
+  - to:
+    {{- if .Values.global.networkPolicy.databaseNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.databaseNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          cnpg.io/cluster: sda-db-cnpg
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ template "sda.fullname" . }}-ingest
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-ingest
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    {{- if .Values.global.networkPolicy.brokerNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.brokerNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          role: broker
+    ports:
+    - protocol: TCP
+      port: 5671
+  - to:
+    {{- if .Values.global.networkPolicy.databaseNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.databaseNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          cnpg.io/cluster: sda-db-cnpg
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ template "sda.fullname" . }}-intercept
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-intercept
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    {{- if .Values.global.networkPolicy.brokerNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.brokerNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          role: broker
+    ports:
+    - protocol: TCP
+      port: 5671
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: {{ template "sda.fullname" . }}-mapper
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "sda.name" . }}-mapper
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    {{- if .Values.global.networkPolicy.brokerNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.brokerNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          role: broker
+    ports:
+    - protocol: TCP
+      port: 5671
+  - to:
+    {{- if .Values.global.networkPolicy.databaseNamespace }}
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.global.networkPolicy.databaseNamespace }}
+    {{- end }}
+    - podSelector:
+        matchLabels:
+          cnpg.io/cluster: sda-db-cnpg
+    ports:
+    - protocol: TCP
+      port: 5432
 ---
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
@@ -52,7 +220,8 @@ spec:
           role: broker
     ports:
     - protocol: TCP
-      port: 5432
+      port: 5671
+  - to:
     {{- if .Values.global.networkPolicy.databaseNamespace }}
     - namespaceSelector:
         matchLabels:
@@ -60,7 +229,7 @@ spec:
     {{- end }}
     - podSelector:
         matchLabels:
-          role: database
+          cnpg.io/cluster: sda-db-cnpg
     ports:
     - protocol: TCP
       port: 5432
