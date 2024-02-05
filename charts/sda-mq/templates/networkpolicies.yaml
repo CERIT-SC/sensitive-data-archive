@@ -42,6 +42,8 @@ spec:
   ingress:
     - ports:
       - port: postgres
+      - protocol: TCP
+        port: 5671
     - from:
       - podSelector:
           matchLabels:
