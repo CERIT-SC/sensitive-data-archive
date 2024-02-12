@@ -1,0 +1,38 @@
+{{- if .Values.networkPolicy.create }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sda-s3
+spec:
+  podSelector:
+    matchLabels:
+      app: sda-s3
+  policyTypes:
+  - Egress
+  - Ingress
+  egress:
+  - ports:
+    - port: 6443
+      protocol: TCP
+    to:
+    - ipBlock:
+        cidr: 10.43.0.1/32
+    - ipBlock:
+        cidr: 10.16.62.14/32
+    - ipBlock:
+        cidr: 10.16.62.15/32
+    - ipBlock:
+        cidr: 10.16.62.16/32
+    - ipBlock:
+        cidr: 10.16.62.17/32
+    - ipBlock:
+        cidr: 10.16.62.18/32
+  ingress:
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 9000
+    - protocol: TCP
+      port: 9443
+{{- end }}

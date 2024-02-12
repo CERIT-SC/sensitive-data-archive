@@ -1,0 +1,10 @@
+apiVersion: v2
+name: sda-s3
+version: 0.0.1
+appVersion: v2024-02-06
+kubeVersion: '>= 1.19.0-0'
+description: Minio S3 component for Sensitive Data Archive (SDA) installation
+home: https://neic-sda.readthedocs.io
+icon: https://neic.no/assets/images/logo.png
+sources:
+- https://github.com/neicnordic/sensitive-data-archive
