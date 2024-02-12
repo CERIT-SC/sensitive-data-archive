@@ -1,11 +1,10 @@
 apiVersion: minio.min.io/v2
 kind: Tenant
 metadata:
-  name: myminio
-  namespace: handl-ns
+  name: sda-s3
   ## Optionally pass labels to be applied to the statefulset pods
   labels:
-    app: minio
+    app: sda-s3
   ## Optionally pass annotations to be applied to the statefulset pods
 #  annotations:
 #    prometheus.io/path: /minio/v2/metrics/cluster
@@ -31,7 +30,7 @@ spec:
   ## Create users in the Tenant using this field. Make sure to create secrets per user added here.
   ## Secret should follow the format used in `minio-creds-secret`.
   users:
-    - name: minio-storage-user
+    - name: sda-s3-user-secret
   ## Create buckets using the console user
   # buckets:
   #   - name: "test-bucket1"
@@ -50,7 +49,7 @@ spec:
   podManagementPolicy: Parallel
   ## Secret with credentials and configurations to be used by MinIO Tenant.
   configuration:
-    name: minio-storage-configuration
+    name: sda-s3-configuration
   ## Add environment variables to be set in MinIO container (https://github.com/minio/minio/tree/master/docs/config)
   env: [ ]
   ## serviceMetadata allows passing additional labels and annotations to MinIO and Console specific
