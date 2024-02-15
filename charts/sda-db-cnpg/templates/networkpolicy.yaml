@@ -14,10 +14,18 @@ spec:
   - ports:
     - port: 5432
       protocol: TCP
-  - from:
+    from:
+    - podSelector: {}
+  - ports:
+    - port: 8000
+      protocol: TCP
+    from:
     - namespaceSelector:
         matchLabels:
-          name: ega-ns
+          kubernetes.io/metadata.name: cloudnativepg
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: cloudnative-pg
   egress:
   - ports:
     - port: 6443
