@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sda-s3-tls
+spec:
+  secretName: sda-s3-tls
+  issuerRef:
+    kind: Issuer
+    name: ega-ca-ns-issuer
+  dnsNames:
+  - "sda-s3-pool-0-0.sda-s3-hl.ega-ns.svc.cluster.local"
+  - "sda-s3-pool-0-1.sda-s3-hl.ega-ns.svc.cluster.local"
+  usages:
+  - digital signature
+  - key encipherment
