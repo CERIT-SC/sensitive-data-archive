@@ -9,7 +9,7 @@ spec:
   primaryUpdateStrategy: unsupervised
   enableSuperuserAccess: true
   superuserSecret:
-    name: sda-db-superuser-secret
+    name: sda-db-cnpg-superuser-secret
 
   resources:
     requests:
