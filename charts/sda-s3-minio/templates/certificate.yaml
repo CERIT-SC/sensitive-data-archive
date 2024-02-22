@@ -8,6 +8,8 @@ spec:
     kind: Issuer
     name: ega-ca-ns-issuer
   dnsNames:
+  - "minio.ega-ns.svc.cluster.local"
+  - "sda-s3-hl.ega-ns.svc.cluster.local"
   - "sda-s3-pool-0-0.sda-s3-hl.ega-ns.svc.cluster.local"
   - "sda-s3-pool-0-1.sda-s3-hl.ega-ns.svc.cluster.local"
   usages:
