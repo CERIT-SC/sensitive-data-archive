@@ -49,15 +49,15 @@ global:
       syncapi: ""
 # issuer requires a configured cert-manager
     issuer: ""
-    clusterIssuer: ""
+    clusterIssuer: "letsencrypt-prod"
     # extra annotations for the ingress
-    annotations: {}
+    annotations:
     # |
     # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
+      kubernetes.io/tls-acme: "true"
 
   log:
-    level: "info"
+    level: "debug"
     format: "json"
 
 # utilize network isolation
@@ -70,6 +70,7 @@ global:
     databaseNamespace: ""
     externalNamespace: ""
     internalNamespace: ""
+    s3Namespace: ""
 
 ## RevisionHistory
 ##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3
@@ -97,7 +98,7 @@ global:
 # Not to be used in production but handy for testing.
   tls:
     enabled: true
-    issuer: ""
+    issuer: "ega-ca-ns-issuer"
     clusterIssuer: ""
 
 # If an external secrets management service is used set this to true
@@ -105,48 +106,51 @@ global:
 
 # global configurations
   archive:
-    storageType: "" # s3 or posix
+    storageType: "s3" # s3 or posix
   # The six lines below is only used with S3 backend
-    s3Url: ""
-    s3Bucket: ""
+    s3Url: "sda-s3-hl.ega-ns.svc.cluster.local"
+    s3Bucket: "archive"
     s3Region: "us-east-1"
     s3ChunkSize: 15 # Chunk size in MB > 5
     s3AccessKey: null
     s3SecretKey: null
-    s3CaFile: null
-    s3Port: 443
+    s3CaFile: "ca.crt"
+    s3Port: 9000
   # The lines below is only used with POSIX backend
     volumePath: "/archive"
+    existingClaim: "pvc-archive"
     nfsServer: ""
     nfsPath: ""
 
   backupArchive:
-    storageType: "" # s3 or posix
+    storageType: "s3" # s3 or posix
   # The six lines below is only used with S3 backend
-    s3Url: ""
-    s3Bucket: ""
+    s3Url: "sda-s3-hl.ega-ns.svc.cluster.local"
+    s3Bucket: "backuparchive"
     s3Region: "us-east-1"
     s3ChunkSize: 15 # Chunk size in MB > 5
     s3AccessKey: null
     s3SecretKey: null
-    s3Port: 443
+    s3CaFile: "ca.crt"
+    s3Port: 9000
   # The lines below is only used with POSIX backend
     volumePath: "/backup"
+    existingClaim: "pvc-backuparchive"
     nfsServer: ""
     nfsPath: ""
     copyHeader: false
 
   auth:
     # @param jwtSecret, name of the secret holding the jwt signing key
-    jwtSecret:
+    jwtSecret: sda-svc-auth-jwt
     # @param jwtAlg, cipher type of the signing key
     jwtAlg: ES256
     # @param jwtKey, name of the signing key
-    jwtKey:
+    jwtKey: privateKey
     # @param jwtPub, name of the public signing key
-    jwtPub:
+    jwtPub: publicKey
     # @param resignJwt, if true (or empty) the jwt will be resigned with the jwtKey
-    resignJwt: false
+    resignJwt: true
     # @param corsOrigins, domain name of allowed origin for cross-domain requests
     corsOrigins: ""
     # @param corsMethods, allowed methods for cross-domain requests
@@ -161,8 +165,8 @@ global:
   broker:
     durable: true
     exchange: "sda"
-    host: ""
     password: ""
+    host: "sda-mq"
     port: 5671
     ssl: true
     username: ""
@@ -179,16 +183,16 @@ global:
     password: ""
 
   c4gh:
-    secretName: ""
+    secretName: "c4gh"
   # name of the c4gh key file.
-    keyFile: ""
+    keyFile: "c4gh.sec.pem"
   # name of the public file, required for testing
-    publicFile: ""
     passphrase: ""
+    publicFile: "c4gh.pub.pem"
     backupPubKey: ""
 
   db:
-    host: ""
+    host: "sda-db-cnpg-rw"
     name: "sda"
     user: ""
     password: ""
@@ -233,25 +237,26 @@ global:
 
   oidc:
     provider:  "https://login.elixir-czech.org/oidc/"
-    jwkPath: "/jwk"
     id: ""
     secret: ""
+    jwkPath: "jwk"
 
   inbox:
     servicePort: 2222
-    storageType: ""
+    storageType: "s3"
   # These lines below are only used with posix
     path: "/inbox"
     user: "lega"
     nfsServer: ""
     nfsPath: ""
-    existingClaim: ""
+    existingClaim: "pvc-inbox"
   # These lines below are only used with s3
-    s3Url: ""
+    s3Url: "sda-s3-hl.ega-ns.svc.cluster.local"
     s3Bucket: "inbox"
     s3AccessKey: null
     s3SecretKey: null
-    s3Port: 443
+    s3CaFile: "ca.crt"
+    s3Port: 9000
     s3ReadyPath: ""
     s3Region: ""
 
