@@ -108,7 +108,7 @@ global:
   archive:
     storageType: "s3" # s3 or posix
   # The six lines below is only used with S3 backend
-    s3Url: "sda-s3-hl.ega-ns.svc.cluster.local"
+    s3Url: "https://sda-s3-hl.ega-ns.svc.cluster.local"
     s3Bucket: "archive"
     s3Region: "us-east-1"
     s3ChunkSize: 15 # Chunk size in MB > 5
@@ -125,7 +125,7 @@ global:
   backupArchive:
     storageType: "s3" # s3 or posix
   # The six lines below is only used with S3 backend
-    s3Url: "sda-s3-hl.ega-ns.svc.cluster.local"
+    s3Url: "https://sda-s3-hl.ega-ns.svc.cluster.local"
     s3Bucket: "backuparchive"
     s3Region: "us-east-1"
     s3ChunkSize: 15 # Chunk size in MB > 5
@@ -251,7 +251,7 @@ global:
     nfsPath: ""
     existingClaim: "pvc-inbox"
   # These lines below are only used with s3
-    s3Url: "sda-s3-hl.ega-ns.svc.cluster.local"
+    s3Url: "https://sda-s3-hl.ega-ns.svc.cluster.local"
     s3Bucket: "inbox"
     s3AccessKey: null
     s3SecretKey: null
