@@ -58,7 +58,8 @@ spec:
         fsGroup: 65534
       containers:
       - name: download
-        image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-download"
+        #image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}-download"
+        image: cerit.io/cerit/sensitive-data-archive:v0.2.73-download
         imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
         securityContext:
           allowPrivilegeEscalation: false
