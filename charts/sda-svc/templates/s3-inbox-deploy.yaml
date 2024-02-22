@@ -213,18 +213,6 @@ spec:
         - name: liveness-port
           containerPort: 8001
           protocol: TCP
-        livenessProbe:
-          httpGet:
-            path: /live
-            port: liveness-port
-          failureThreshold: 1
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: liveness-port
-          failureThreshold: 1
-          periodSeconds: 5
         resources:
 {{ toYaml .Values.s3Inbox.resources | trim | indent 10 }}
         volumeMounts:
