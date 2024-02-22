@@ -28,12 +28,12 @@ rbacEnabled: true
 # There are a number of network providers that support NetworkPolicy, including:
 # Calico, Cilium, Kube-router, Romana and Weave Net
 networkPolicy:
-  brokerNamespace: ""
   create: true
+  brokerNamespace: "ega-ns"
 
 tls:
   enabled: true
-  issuer: ""
+  issuer: "ega-ca-ns-issuer"
   clusterIssuer: ""
   secretName: 
   permissions: false
@@ -59,7 +59,7 @@ broker:
   password: "bar"
   port: 5671
   username: "baz"
-  vhost: "/"
+  vhost: "sda"
   queue:
     inbox: "inbox"
     completed: "completed"
