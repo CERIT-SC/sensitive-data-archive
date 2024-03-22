@@ -5,7 +5,7 @@ ENV CGO_ENABLED=0
 
 COPY . .
 
-RUN export GOPROXY=direct
+RUN export GO111MODULE=on && export GOPROXY=https://goproxy.cn
 
 RUN go build
 
