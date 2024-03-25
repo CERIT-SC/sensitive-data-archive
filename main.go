@@ -59,7 +59,7 @@ func main() {
 			}
 			return dialer.Dial(network, u.Hostname()+":"+u.Port())
 		},
-		Locale: "en_US",
+		TLSClientConfig: getTLSConfig(),
 	}
 	//legaMQ, err := amqp.Dial(os.Getenv("LEGA_MQ_CONNECTION"))
 	legaMQ, err := amqp.DialConfig(os.Getenv("LEGA_MQ_CONNECTION"), config)
