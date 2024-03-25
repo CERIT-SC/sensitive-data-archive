@@ -9,6 +9,11 @@ import (
 	_ "github.com/lib/pq"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"log"
+	"net"
+	"net/url"
+	"time"
+
+	//"net"
 	"os"
 	"sync"
 )
@@ -23,7 +28,41 @@ func main() {
 	db, err = sql.Open("postgres", os.Getenv("POSTGRES_CONNECTION"))
 	failOnError(err, "Failed to connect to DB")
 
-	legaMQ, err := amqp.DialTLS(os.Getenv("LEGA_MQ_CONNECTION"), getTLSConfig())
+	legaMqConnString := os.Getenv("LEGA_MQ_CONNECTION")
+	u, err := url.Parse(legaMqConnString)
+	if err != nil {
+		fmt.Println("Error parsing URL:", err)
+		return
+	}
+
+	//fmt.Println("Looking up IPs")
+	//ips, _ := net.LookupIP("mq")
+	//for _, ip := range ips {
+	//	if ipv4 := ip.To4(); ipv4 != nil {
+	//		fmt.Println("IPv4: ", ipv4)
+	//	}
+	//}
+
+	dialer := &net.Dialer{
+		// Setting connection (including handshake) timeout to 30 seconds
+		Timeout: 30 * time.Second,
+	}
+
+	fmt.Println(legaMqConnString)
+
+	config := amqp.Config{
+		Dial: func(network, addr string) (net.Conn, error) {
+			fmt.Println("Network: ", network)
+			_, err := net.LookupIP(u.Hostname())
+			if err != nil {
+				return nil, err
+			}
+			return dialer.Dial(network, u.Hostname()+":"+u.Port())
+		},
+		Locale: "en_US",
+	}
+	//legaMQ, err := amqp.Dial(os.Getenv("LEGA_MQ_CONNECTION"))
+	legaMQ, err := amqp.DialConfig(os.Getenv("LEGA_MQ_CONNECTION"), config)
 	failOnError(err, "Failed to connect to LEGA RabbitMQ")
 	legaConsumeChannel, err := legaMQ.Channel()
 	failOnError(err, "Failed to create LEGA consume RabbitMQ channel")
