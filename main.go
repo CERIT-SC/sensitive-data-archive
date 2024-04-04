@@ -11,9 +11,6 @@ import (
 	"log"
 	"net"
 	"net/url"
-	"time"
-
-	//"net"
 	"os"
 	"sync"
 )
@@ -22,47 +19,32 @@ var db *sql.DB
 var publishMutex sync.Mutex
 var cegaPublishChannel *amqp.Channel
 
+func DoIPLookUp(connectionString string) {
+	u, err := url.Parse(connectionString)
+	if err != nil {
+		fmt.Println("Error parsing connectionString:", err)
+		return
+	}
+	ip, err := net.LookupIP(u.Hostname())
+	if err != nil || len(ip) == 0 {
+		log.Printf("Unable to resolve host '%s'", u.Hostname())
+		return
+	}
+	firstRecord := 0
+	log.Printf("Host '%s' resolves to '%s'", u.Hostname(), ip[firstRecord].String())
+}
+
 func main() {
+
 	var err error
 
 	db, err = sql.Open("postgres", os.Getenv("POSTGRES_CONNECTION"))
 	failOnError(err, "Failed to connect to DB")
 
 	legaMqConnString := os.Getenv("LEGA_MQ_CONNECTION")
-	u, err := url.Parse(legaMqConnString)
-	if err != nil {
-		fmt.Println("Error parsing URL:", err)
-		return
-	}
+	DoIPLookUp(legaMqConnString)
 
-	//fmt.Println("Looking up IPs")
-	//ips, _ := net.LookupIP("mq")
-	//for _, ip := range ips {
-	//	if ipv4 := ip.To4(); ipv4 != nil {
-	//		fmt.Println("IPv4: ", ipv4)
-	//	}
-	//}
-
-	dialer := &net.Dialer{
-		// Setting connection (including handshake) timeout to 30 seconds
-		Timeout: 30 * time.Second,
-	}
-
-	fmt.Println(legaMqConnString)
-
-	config := amqp.Config{
-		Dial: func(network, addr string) (net.Conn, error) {
-			fmt.Println("Network: ", network)
-			_, err := net.LookupIP(u.Hostname())
-			if err != nil {
-				return nil, err
-			}
-			return dialer.Dial(network, u.Hostname()+":"+u.Port())
-		},
-		TLSClientConfig: getTLSConfig(),
-	}
-	//legaMQ, err := amqp.Dial(os.Getenv("LEGA_MQ_CONNECTION"))
-	legaMQ, err := amqp.DialConfig(os.Getenv("LEGA_MQ_CONNECTION"), config)
+	legaMQ, err := amqp.DialTLS(legaMqConnString, &tls.Config{InsecureSkipVerify: true})
 	failOnError(err, "Failed to connect to LEGA RabbitMQ")
 	legaConsumeChannel, err := legaMQ.Channel()
 	failOnError(err, "Failed to create LEGA consume RabbitMQ channel")
@@ -74,7 +56,10 @@ func main() {
 		log.Fatal(err)
 	}()
 
-	cegaMQ, err := amqp.DialTLS(os.Getenv("CEGA_MQ_CONNECTION"), getTLSConfig())
+	cegaMqConnString := os.Getenv("CEGA_MQ_CONNECTION")
+	DoIPLookUp(cegaMqConnString)
+
+	cegaMQ, err := amqp.DialTLS(cegaMqConnString, getTLSConfig())
 	failOnError(err, "Failed to connect to CEGA RabbitMQ")
 	cegaConsumeChannel, err := cegaMQ.Channel()
 	failOnError(err, "Failed to create CEGA consume RabbitMQ channel")
@@ -264,7 +249,7 @@ func selectEgaIdByElixirId(elixirId string) (egaId string, err error) {
 }
 
 func getTLSConfig() *tls.Config {
-	tlsConfig := tls.Config{}
+	tlsConfig := tls.Config{InsecureSkipVerify: true}
 	if os.Getenv("VERIFY_CERT") == "true" {
 		tlsConfig.InsecureSkipVerify = false
 	} else {
