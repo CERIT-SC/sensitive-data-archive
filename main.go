@@ -44,7 +44,7 @@ func main() {
 	legaMqConnString := os.Getenv("LEGA_MQ_CONNECTION")
 	DoIPLookUp(legaMqConnString)
 
-	legaMQ, err := amqp.DialTLS(legaMqConnString, &tls.Config{InsecureSkipVerify: true})
+	legaMQ, err := amqp.Dial(legaMqConnString)
 	failOnError(err, "Failed to connect to LEGA RabbitMQ")
 	legaConsumeChannel, err := legaMQ.Channel()
 	failOnError(err, "Failed to create LEGA consume RabbitMQ channel")
@@ -59,7 +59,7 @@ func main() {
 	cegaMqConnString := os.Getenv("CEGA_MQ_CONNECTION")
 	DoIPLookUp(cegaMqConnString)
 
-	cegaMQ, err := amqp.DialTLS(cegaMqConnString, getTLSConfig())
+	cegaMQ, err := amqp.Dial(cegaMqConnString)
 	failOnError(err, "Failed to connect to CEGA RabbitMQ")
 	cegaConsumeChannel, err := cegaMQ.Channel()
 	failOnError(err, "Failed to create CEGA consume RabbitMQ channel")
