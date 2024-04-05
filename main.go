@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"time"
 )
 
 var db *sql.DB
@@ -41,6 +42,24 @@ func convertHostToIP(connectionString string) (string, error) {
 	return u.String(), nil
 }
 
+// dialRabbitMQ attempts to connect to RabbitMQ up to 10 times with a delay between retries
+// It returns a connection instance or an error
+func dialRabbitMQ(connectionString string) (*amqp.Connection, error) {
+	var conn *amqp.Connection
+	var err error
+	for i := 0; i < 10; i++ {
+		conn, err = amqp.Dial(connectionString)
+		if err == nil {
+			fmt.Printf("Successfully connected to %s\n", connectionString)
+			return conn, nil
+		}
+		fmt.Printf("Attempt %d: Failed to connect to RabbitMQ: %s\n", i+1, err)
+		time.Sleep(2 * time.Second) // Wait before retrying
+	}
+	// After all attempts, return the last error
+	return nil, err
+}
+
 func main() {
 
 	var err error
@@ -48,11 +67,8 @@ func main() {
 	db, err = sql.Open("postgres", os.Getenv("POSTGRES_CONNECTION"))
 	failOnError(err, "Failed to connect to DB")
 
-	legaMqConnString, err := convertHostToIP(os.Getenv("LEGA_MQ_CONNECTION"))
-	failOnError(err, "Failed to translate connection string for LEGA")
-
-	legaMQ, err := amqp.Dial(legaMqConnString)
-	failOnError(err, "Failed to connect to LEGA RabbitMQ")
+	legaMqConnString := os.Getenv("LEGA_MQ_CONNECTION")
+	legaMQ, err := dialRabbitMQ(legaMqConnString)
 	legaConsumeChannel, err := legaMQ.Channel()
 	failOnError(err, "Failed to create LEGA consume RabbitMQ channel")
 	legaPubishChannel, err := legaMQ.Channel()
@@ -63,10 +79,8 @@ func main() {
 		log.Fatal(err)
 	}()
 
-	cegaMqConnString, err := convertHostToIP(os.Getenv("CEGA_MQ_CONNECTION"))
-	failOnError(err, "Failed to translate connection string for CEGA")
-
-	cegaMQ, err := amqp.Dial(cegaMqConnString)
+	cegaMqConnString := os.Getenv("CEGA_MQ_CONNECTION")
+	cegaMQ, err := dialRabbitMQ(cegaMqConnString)
 	failOnError(err, "Failed to connect to CEGA RabbitMQ")
 	cegaConsumeChannel, err := cegaMQ.Channel()
 	failOnError(err, "Failed to create CEGA consume RabbitMQ channel")
