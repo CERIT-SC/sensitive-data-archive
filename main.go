@@ -19,19 +19,26 @@ var db *sql.DB
 var publishMutex sync.Mutex
 var cegaPublishChannel *amqp.Channel
 
-func DoIPLookUp(connectionString string) {
+// convertHostToIP takes a RabbitMQ connection string
+// and replaces the host with its IP address.
+func convertHostToIP(connectionString string) (string, error) {
+	// Parse the connection string as a URL.
 	u, err := url.Parse(connectionString)
 	if err != nil {
-		fmt.Println("Error parsing connectionString:", err)
-		return
+		return "", fmt.Errorf("error parsing connection string: %w", err)
 	}
-	ip, err := net.LookupIP(u.Hostname())
-	if err != nil || len(ip) == 0 {
-		log.Printf("Unable to resolve host '%s'", u.Hostname())
-		return
+	// Perform a DNS lookup to get the IP address for the host.
+	ips, err := net.LookupIP(u.Hostname())
+	if err != nil {
+		return "", fmt.Errorf("error looking up IP for host %s: %w", u.Hostname(), err)
 	}
-	firstRecord := 0
-	log.Printf("Host '%s' resolves to '%s'", u.Hostname(), ip[firstRecord].String())
+	if len(ips) == 0 {
+		return "", fmt.Errorf("no IP addresses found for host %s", u.Hostname())
+	}
+	// Replace the hostname in the URL with the first IP address found.
+	u.Host = net.JoinHostPort(ips[0].String(), u.Port())
+	// Return the modified connection string.
+	return u.String(), nil
 }
 
 func main() {
@@ -41,8 +48,8 @@ func main() {
 	db, err = sql.Open("postgres", os.Getenv("POSTGRES_CONNECTION"))
 	failOnError(err, "Failed to connect to DB")
 
-	legaMqConnString := os.Getenv("LEGA_MQ_CONNECTION")
-	DoIPLookUp(legaMqConnString)
+	legaMqConnString, err := convertHostToIP(os.Getenv("LEGA_MQ_CONNECTION"))
+	failOnError(err, "Failed to translate connection string for LEGA")
 
 	legaMQ, err := amqp.Dial(legaMqConnString)
 	failOnError(err, "Failed to connect to LEGA RabbitMQ")
@@ -56,8 +63,8 @@ func main() {
 		log.Fatal(err)
 	}()
 
-	cegaMqConnString := os.Getenv("CEGA_MQ_CONNECTION")
-	DoIPLookUp(cegaMqConnString)
+	cegaMqConnString, err := convertHostToIP(os.Getenv("CEGA_MQ_CONNECTION"))
+	failOnError(err, "Failed to translate connection string for CEGA")
 
 	cegaMQ, err := amqp.Dial(cegaMqConnString)
 	failOnError(err, "Failed to connect to CEGA RabbitMQ")
