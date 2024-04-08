@@ -9,7 +9,6 @@ import (
 	_ "github.com/lib/pq"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"log"
-	"net"
 	"net/url"
 	"os"
 	"sync"
@@ -20,40 +19,31 @@ var db *sql.DB
 var publishMutex sync.Mutex
 var cegaPublishChannel *amqp.Channel
 
-// convertHostToIP takes a RabbitMQ connection string
-// and replaces the host with its IP address.
-func convertHostToIP(connectionString string) (string, error) {
-	// Parse the connection string as a URL.
-	u, err := url.Parse(connectionString)
-	if err != nil {
-		return "", fmt.Errorf("error parsing connection string: %w", err)
-	}
-	// Perform a DNS lookup to get the IP address for the host.
-	ips, err := net.LookupIP(u.Hostname())
-	if err != nil {
-		return "", fmt.Errorf("error looking up IP for host %s: %w", u.Hostname(), err)
-	}
-	if len(ips) == 0 {
-		return "", fmt.Errorf("no IP addresses found for host %s", u.Hostname())
-	}
-	// Replace the hostname in the URL with the first IP address found.
-	u.Host = net.JoinHostPort(ips[0].String(), u.Port())
-	// Return the modified connection string.
-	return u.String(), nil
-}
-
-// dialRabbitMQ attempts to connect to RabbitMQ up to 10 times with a delay between retries
-// It returns a connection instance or an error
+// dialRabbitMQ attempts to connect to RabbitMQ up to 10 times
+// with a delay between retries. It returns a connection
+// instance or an error.
 func dialRabbitMQ(connectionString string) (*amqp.Connection, error) {
 	var conn *amqp.Connection
 	var err error
-	for i := 0; i < 10; i++ {
-		conn, err = amqp.Dial(connectionString)
+	var attempts = 10
+	// Parse the connection string as a URL.
+	u, err := url.Parse(connectionString)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("Trying to dial host: %s [I will attempt to dial %d times with 2 seconds interval]", u.Hostname(), attempts)
+	log.Printf("Is TLS enabled? %t", os.Getenv("ENABLE_TLS") == "true")
+	for i := 0; i < attempts; i++ {
+		if os.Getenv("ENABLE_TLS") == "true" {
+			conn, err = amqp.DialTLS(connectionString, getTLSConfig())
+		} else {
+			conn, err = amqp.Dial(connectionString)
+		}
 		if err == nil {
-			fmt.Printf("Successfully connected to %s\n", connectionString)
+			log.Printf("Successfully connected to %s\n", connectionString)
 			return conn, nil
 		}
-		fmt.Printf("Attempt %d: Failed to connect to RabbitMQ: %s\n", i+1, err)
+		log.Printf("Attempt %d: Failed to connect to RabbitMQ: %s\n", i+1, err)
 		time.Sleep(2 * time.Second) // Wait before retrying
 	}
 	// After all attempts, return the last error
@@ -270,7 +260,7 @@ func selectEgaIdByElixirId(elixirId string) (egaId string, err error) {
 }
 
 func getTLSConfig() *tls.Config {
-	tlsConfig := tls.Config{InsecureSkipVerify: true}
+	tlsConfig := tls.Config{}
 	if os.Getenv("VERIFY_CERT") == "true" {
 		tlsConfig.InsecureSkipVerify = false
 	} else {
