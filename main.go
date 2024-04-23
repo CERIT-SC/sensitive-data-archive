@@ -61,7 +61,7 @@ func main() {
 	legaMQ, err := dialRabbitMQ(legaMqConnString)
 	legaConsumeChannel, err := legaMQ.Channel()
 	failOnError(err, "Failed to create LEGA consume RabbitMQ channel")
-	legaPubishChannel, err := legaMQ.Channel()
+	legaPublishChannel, err := legaMQ.Channel()
 	failOnError(err, "Failed to create LEGA publish RabbitMQ channel")
 	legaNotifyCloseChannel := legaMQ.NotifyClose(make(chan *amqp.Error))
 	go func() {
@@ -90,7 +90,7 @@ func main() {
 	failOnError(err, "Failed to connect to CEGA queue: "+cegaQueue)
 	go func() {
 		for delivery := range cegaDeliveries {
-			forwardDeliveryTo(true, cegaConsumeChannel, legaPubishChannel, legaExchange, "", delivery)
+			forwardDeliveryTo(true, cegaConsumeChannel, legaPublishChannel, legaExchange, "", delivery)
 		}
 	}()
 
@@ -99,14 +99,14 @@ func main() {
 	// failOnError(err, "Failed to connect to CEGA queue: v1.stableIDs")
 	// go func() {
 	// 	for delivery := range stableIDDeliveries {
-	// 		forwardDeliveryTo(true, cegaConsumeChannel, legaPubishChannel, legaExchange, "", delivery)
+	// 		forwardDeliveryTo(true, cegaConsumeChannel, legaPublishChannel, legaExchange, "", delivery)
 	// 	}
 	// }()
 	// mappingDeliveries, err := cegaConsumeChannel.Consume("v1.mapping", "", false, false, false, false, nil)
 	// failOnError(err, "Failed to connect to CEGA queue: v1.mapping")
 	// go func() {
 	// 	for delivery := range mappingDeliveries {
-	// 		forwardDeliveryTo(true, cegaConsumeChannel, legaPubishChannel, legaExchange, "", delivery)
+	// 		forwardDeliveryTo(true, cegaConsumeChannel, legaPublishChannel, legaExchange, "", delivery)
 	// 	}
 	// }()
 	// TODO: <end>Temp WA, remove after migrating to a single queue</end>
