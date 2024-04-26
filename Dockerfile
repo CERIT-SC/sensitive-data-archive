@@ -5,8 +5,6 @@ ENV CGO_ENABLED=0
 
 COPY . .
 
-RUN export GO111MODULE=on && export GOPROXY=https://goproxy.cn
-
 RUN go build
 
 RUN echo "nobody:x:65534:65534:nobody:/:/sbin/nologin" > passwd
