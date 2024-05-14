@@ -1,4 +1,4 @@
-module github.com/uio-bmi/mq-interceptor
+module github.com/ELIXIR-NO/FEGA-Norway/mq-interceptor
 
 go 1.21.8
 
