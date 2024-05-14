@@ -1,0 +1,206 @@
+{
+  "users": [
+    {
+      "name": "USER_NAME",
+      "password_hash": "PASSWORD_HASH",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "VIRTUAL_HOST"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "USER_NAME",
+      "vhost": "VIRTUAL_HOST",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "parameters": [
+  ],
+  "policies": [
+  ],
+  "queues": [
+    {
+      "name": "inbox",
+      "vhost": "VIRTUAL_HOST",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+      }
+    },
+    {
+      "name": "ingest",
+      "vhost": "VIRTUAL_HOST",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+      }
+    },
+    {
+      "name": "archived",
+      "vhost": "VIRTUAL_HOST",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+      }
+    },
+    {
+      "name": "verified",
+      "vhost": "VIRTUAL_HOST",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+      }
+    },
+    {
+      "name": "completed",
+      "vhost": "VIRTUAL_HOST",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+      }
+    },
+    {
+      "name": "accessionIDs",
+      "vhost": "VIRTUAL_HOST",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+      }
+    },
+    {
+      "name": "mappings",
+      "vhost": "VIRTUAL_HOST",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+      }
+    },
+    {
+      "name": "error",
+      "vhost": "VIRTUAL_HOST",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+      }
+    },
+     {
+      "name": "files",
+      "vhost": "VIRTUAL_HOST",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+      }
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "ingest",
+      "destination_type": "queue",
+      "routing_key": "ingest",
+      "arguments": {
+      }
+    },
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "archived",
+      "destination_type": "queue",
+      "routing_key": "archived",
+      "arguments": {
+      }
+    },
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "verified",
+      "destination_type": "queue",
+      "routing_key": "verified",
+      "arguments": {
+      }
+    },
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "completed",
+      "destination_type": "queue",
+      "routing_key": "completed",
+      "arguments": {
+      }
+    },
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "accessionIDs",
+      "destination_type": "queue",
+      "routing_key": "accession",
+      "arguments": {
+      }
+    },
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "accessionIDs",
+      "destination_type": "queue",
+      "routing_key": "accessionIDs",
+      "arguments": {
+      }
+    },
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "mappings",
+      "destination_type": "queue",
+      "routing_key": "mapping",
+      "arguments": {
+      }
+    },
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "mappings",
+      "destination_type": "queue",
+      "routing_key": "mappings",
+      "arguments": {
+      }
+    },
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "error",
+      "destination_type": "queue",
+      "routing_key": "error",
+      "arguments": {
+      }
+    },
+    {
+      "source": "sda",
+      "vhost": "VIRTUAL_HOST",
+      "destination": "files",
+      "destination_type": "queue",
+      "routing_key": "files",
+      "arguments": {
+      }
+    }
+  ]
+}

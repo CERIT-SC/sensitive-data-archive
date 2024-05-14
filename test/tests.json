@@ -1,0 +1,94 @@
+[
+  {
+    "testname"  : "test ingest", 
+    "direction" : "lega",    
+    "queue"     : "files",
+    "fails"     : false,
+    "enduser"   : "alice@elixir.org",    
+    "message"   : {
+                    "type": "ingest",
+                    "user": "alice@ega.org",
+                    "filepath": "/inbox/user/dir1/file.txt.c4gh",
+                    "encrypted_checksums": [ { "type": "sha256", "value": "82E4e60e7beb3db2e06f28c4c942703dabb6d6" } ]
+                  }
+  }
+  ,
+  {
+    "testname"  : "test accession", 
+    "direction" : "lega",
+    "queue"     : "files",
+    "fails"     : false,      
+    "enduser"   : "bob@elixir.org",    
+    "message"   : {
+                    "type": "accession",
+                    "user": "bob@ega.org",
+                    "filepath": "/inbox/user/dir1/file.txt.c4gh",
+                    "accession_id": "EGAF00000123456",
+                    "decrypted_checksums": [ { "type": "sha256", "value": "7853c53a03ccfc38683e533e68ab37b5b790074" }, 
+                                             { "type": "md5", "value": "ee25789673d8711563d5fcb7234f9a68" }
+                                           ]
+                  }
+  }
+    ,
+  {
+    "testname"  : "test unknown user",
+    "direction" : "lega",
+    "queue"     : "files",
+    "fails"     : true,
+    "reason"    : "This should fail since John is not a registered user",      
+    "enduser"   : "john@elixir.org",
+    "message"   : {
+                    "type": "accession",
+                    "user": "john@ega.org",
+                    "filepath": "/inbox/user/dir1/file.txt.c4gh",
+                    "accession_id": "EGAF00000123456",
+                    "decrypted_checksums": [ { "type": "sha256", "value": "7853c53a03ccfc38683e533e68ab37b5b790074" },
+                                             { "type": "md5", "value": "ee25789673d8711563d5fcb7234f9a68" }
+                                           ]
+                  }
+  }
+    ,
+  {
+    "testname"  : "test missing user",
+    "direction" : "lega",
+    "queue"     : "files",
+    "fails"     : false,
+    "reason"    : "This message contains no 'user' field, but that should be OK",
+    "enduser"   : "john@elixir.org",
+    "message"   : {
+                    "type": "accession",
+                    "filepath": "/inbox/user/dir1/file.txt.c4gh",
+                    "accession_id": "EGAF00000123456",
+                    "decrypted_checksums": [ { "type": "sha256", "value": "7853c53a03ccfc38683e533e68ab37b5b790074" },
+                                             { "type": "md5", "value": "ee25789673d8711563d5fcb7234f9a68" }
+                                           ]
+                  }
+  }
+    ,    
+  {
+    "testname"  : "test improper message formatting",
+    "direction" : "lega",
+    "queue"     : "files",
+    "fails"     : true,
+    "reason"    : "This should fail since the message is not properly JSON formatted",
+    "enduser"   : "alice@elixir.org",
+    "message"   : "<html><body><h1>This is an HTML page</h1>That could be problematic</body></html>"
+  }
+    ,
+  {
+    "testname"  : "test ingestion-accession-request", 
+    "direction" : "cega",
+    "routingkey": "files.verified",     
+    "queue"     : "v1.files.verified",
+    "fails"     : false,     
+    "type"      : "ingestion-accession-request",
+    "enduser"   : "bob@ega.org",    
+    "message"   : {
+                    "user": "bob@elixir.org",
+                    "filepath": "/inbox/user/dir1/file.txt.c4gh",
+                    "decrypted_checksums": [ { "type": "sha256", "value": "7853c53a03ccfc38683e...533e68ab37b5b790074" }, 
+                                             { "type": "md5", "value": "ee25789673d8711563d5fcb7234f9a68" }
+                                           ]
+                  }
+  }  
+]
