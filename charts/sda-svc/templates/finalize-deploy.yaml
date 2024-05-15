@@ -89,7 +89,7 @@ spec:
           value: {{ .Values.global.archive.s3ChunkSize | quote }}
     {{- if and .Values.global.archive.s3CaFile .Values.global.tls.enabled }}
         - name: ARCHIVE_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
+          value: {{ template "s3tlsPath" . }}/{{ .Values.global.archive.s3CaFile }}
     {{- end }}
   {{- else }}
           value: "posix"
@@ -113,7 +113,7 @@ spec:
           value: {{ .Values.global.backupArchive.s3ChunkSize | quote }}
     {{- if and .Values.global.backupArchive.s3CaFile .Values.global.tls.enabled }}
         - name: BACKUP_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
+          value: {{ template "s3tlsPath" . }}/{{ .Values.global.backupArchive.s3CaFile }}
     {{- end }}
   {{- else }}
           value: "posix"
@@ -234,6 +234,8 @@ spec:
     {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
           mountPath: {{ template "tlsPath" . }}
+        - name: s3tls
+          mountPath: {{ template "s3tlsPath" . }}
     {{- end }}
     {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive
@@ -255,6 +257,10 @@ spec:
             defaultMode: 0440
             secretName: {{ required "An certificate issuer or a TLS secret name is required for finalize" .Values.finalize.tls.secretName }}
         {{- end }}
+        - name: s3tls
+          secret:
+            defaultMode: 0440
+            secretName: sda-s3-tls
       {{- end }}
       {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive
