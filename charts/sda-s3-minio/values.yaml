@@ -1,2 +1,7 @@
 networkPolicy:
-  create: true
+  create: false
+
+credentials:
+  console:
+    accessKey: console
+    secretKey: console123
