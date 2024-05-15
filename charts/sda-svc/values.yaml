@@ -12,6 +12,7 @@ global:
   secretsPath: /.secrets
   c4ghPath: "c4gh"
   tlsPath: "tls"
+  s3tlsPath: "s3tls"
   jwtPath: "jwt"
 
 # Name of an injected config file, located in the secretsPath
@@ -120,9 +121,9 @@ global:
     s3Bucket: "archive"
     s3Region: "us-east-1"
     s3ChunkSize: 15 # Chunk size in MB > 5
-    s3AccessKey: null
-    s3SecretKey: null
-    s3CaFile: "ca.crt"
+    s3AccessKey: console
+    s3SecretKey: "console123"
+    s3CaFile: "public.crt"
     s3Port: 9000
   # The lines below is only used with POSIX backend
     volumePath: "/archive"
@@ -137,9 +138,9 @@ global:
     s3Bucket: "backuparchive"
     s3Region: "us-east-1"
     s3ChunkSize: 15 # Chunk size in MB > 5
-    s3AccessKey: null
-    s3SecretKey: null
-    s3CaFile: "ca.crt"
+    s3AccessKey: console
+    s3SecretKey: "console123"
+    s3CaFile: "public.crt"
     s3Port: 9000
   # The lines below is only used with POSIX backend
     volumePath: "/backup"
@@ -264,9 +265,9 @@ global:
   # These lines below are only used with s3
     s3Url: "https://sda-s3-hl.ega-ns.svc.cluster.local"
     s3Bucket: "inbox"
-    s3AccessKey: null
-    s3SecretKey: null
-    s3CaFile: "ca.crt"
+    s3AccessKey: console
+    s3SecretKey: "console123"
+    s3CaFile: "public.crt"
     s3Port: 9000
     s3ReadyPath: ""
     s3Region: ""

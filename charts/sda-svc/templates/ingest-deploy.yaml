@@ -89,7 +89,7 @@ spec:
           value: {{ .Values.global.archive.s3ChunkSize | quote }}
       {{- if and .Values.global.archive.s3CaFile .Values.global.tls.enabled }}
         - name: ARCHIVE_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
+          value: {{ template "s3tlsPath" . }}/{{ .Values.global.archive.s3CaFile }}
       {{- end }}
       {{- else }}
           value: "posix"
@@ -153,7 +153,7 @@ spec:
           value: {{ required "S3 inbox bucket missing" .Values.global.inbox.s3Bucket }}
       {{- if and .Values.global.inbox.s3CaFile .Values.global.tls.enabled }}
         - name: INBOX_CACERT
-          value: {{ template "tlsPath" . }}/ca.crt
+          value: {{ template "s3tlsPath" . }}/{{ .Values.global.inbox.s3CaFile }}
       {{- end }}
         - name: INBOX_REGION
           value: {{ default "us-east-1" .Values.global.inbox.s3Region }}
@@ -240,6 +240,8 @@ spec:
       {{- if and (not .Values.global.pkiService) .Values.global.tls.enabled }}
         - name: tls
           mountPath: "{{ template "tlsPath" . }}"
+        - name: s3tls
+          mountPath: {{ template "s3tlsPath" . }}
       {{- end }}
       {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive
@@ -270,6 +272,10 @@ spec:
             defaultMode: 0440
             secretName: {{ required "An certificate issuer or a TLS secret name is required for ingest" .Values.ingest.tls.secretName }}
         {{- end }}
+        - name: s3tls
+          secret:
+            defaultMode: 0440
+            secretName: sda-s3-tls
       {{- end }}
       {{- if eq "posix" .Values.global.archive.storageType }}
         - name: archive

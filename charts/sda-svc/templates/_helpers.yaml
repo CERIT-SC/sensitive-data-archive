@@ -113,6 +113,10 @@ Create chart name and version as used by the chart label.
 {{- ternary .Values.global.secretsPath (printf "%s/%s" .Values.global.secretsPath .Values.global.tlsPath) (empty .Values.global.tlsPath) -}}
 {{- end -}}
 
+{{- define "s3tlsPath" -}}
+{{- ternary .Values.global.secretsPath (printf "%s/%s" .Values.global.secretsPath .Values.global.s3tlsPath) (empty .Values.global.s3tlsPath) -}}
+{{- end -}}
+
 {{- define "jwtPath" -}}
 {{- ternary .Values.global.secretsPath (printf "%s/%s" .Values.global.secretsPath .Values.global.jwtPath) (empty .Values.global.jwtPath) -}}
 {{- end -}}
