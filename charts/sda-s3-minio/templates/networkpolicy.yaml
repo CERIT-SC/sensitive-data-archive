@@ -11,12 +11,14 @@ spec:
   - Egress
   - Ingress
   egress:
-  - to:
-    - podSelector: {}
+  - to: # pool to pool
+    - podSelector:
+        matchLabels:
+          app: sda-s3
     ports:
     - protocol: TCP
       port: 9000
-  - to:
+  - to: # DNS
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: kube-system
@@ -26,7 +28,7 @@ spec:
     ports:
     - protocol: UDP
       port: 53
-  - to:
+  - to: # Minio operator
     - ipBlock:
         cidr: 10.43.0.1/32
     - ipBlock:
