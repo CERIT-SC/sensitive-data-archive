@@ -11,6 +11,12 @@ spec:
   superuserSecret:
     name: sda-db-cnpg-superuser-secret
 
+  {{- if .Values.tls.enable }}
+  certificates:
+    serverTLSSecret: sda-db-cnpg-certs
+    serverCASecret: {{ .Values.tls.issuerCaCertSecret }}
+  {{- end }}
+
   resources:
     requests:
       memory: "2Gi"

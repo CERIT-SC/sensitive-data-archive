@@ -1,0 +1,28 @@
+{{- if .Values.tls.enable }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sda-db-cnpg-certs
+  labels:
+    cnpg.io/reload: ""
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sda-db-cnpg-certs
+spec:
+  secretName: sda-db-cnpg-certs
+  usages:
+    - server auth
+  dnsNames:
+    - sda-db-cnpg-rw
+    - sda-db-cnpg-rw.{{ .Release.Namespace }}.svc.cluster.local
+    - sda-db-cnpg-r
+    - sda-db-cnpg-r.{{ .Release.Namespace }}.svc.cluster.local
+    - sda-db-cnpg-ro
+    - sda-db-cnpg-ro.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    name: {{ .Values.tls.issuer }}
+    kind: Issuer
+    group: cert-manager.io
+{{- end }}
