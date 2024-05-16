@@ -59,8 +59,13 @@ networkPolicy:
 # App labels that are allowed to connect to the database
 # This should be a multi-line string mapping directly to the a map of
 # the podselector of the network policy
-  matchLabels: |
-    app: sda-svc
+  podSelector: |
+    matchExpressions:
+      - key: release
+        operator: In
+        values:
+          - sda-svc
+          - sda-orch
 
 ## Persistent Volume Storage Class
 ## If defined, storageClassName: <storageClass>
