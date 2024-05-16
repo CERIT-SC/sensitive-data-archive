@@ -9,15 +9,29 @@ spec:
     matchLabels:
       app: {{ template "sda.fullname" . }}
   policyTypes:
+  - Egress
   - Ingress
+  egress:
+  - to: # DNS
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+  - ports: # Connection to CEGA
+    - protocol: TCP
+      port: 5671
   ingress:
     - ports:
       - port: postgres
       - protocol: TCP
         port: 5671
-    - from:
+      from:
       - podSelector:
-          matchLabels:
-{{ .Values.networkPolicy.matchLabels | trim | indent 12 }}
+{{ .Values.networkPolicy.podSelector | trim | indent 12 }}
 ---
 {{- end }}
