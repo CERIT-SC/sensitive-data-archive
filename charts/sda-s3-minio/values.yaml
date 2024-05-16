@@ -1,5 +1,5 @@
 networkPolicy:
-  create: false
+  create: true
 
 credentials:
   console:
