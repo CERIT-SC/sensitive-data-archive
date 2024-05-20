@@ -28,7 +28,7 @@ spec:
     ports:
     - protocol: UDP
       port: 53
-  - to: # Minio operator
+  - to: # K8s API
     - ipBlock:
         cidr: 10.43.0.1/32
     - ipBlock:
@@ -45,11 +45,7 @@ spec:
     - port: 6443
       protocol: TCP
   ingress:
-  - from:
-    - podSelector: {}
-    ports:
+  - ports:
     - protocol: TCP
       port: 9000
-    - protocol: TCP
-      port: 9443
 {{- end }}
