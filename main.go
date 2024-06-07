@@ -48,7 +48,7 @@ func dialRabbitMQ(connectionString string) (*amqp.Connection, error) {
 			conn, err = amqp.Dial(connectionString)
 		}
 		if err == nil {
-			log.Printf("Successfully connected to %s\n", connectionString)
+			log.Printf("Successfully connected to host %s\n", u.Hostname())
 			return conn, nil
 		}
 		log.Printf("Attempt %d: Failed to connect to RabbitMQ: %s\n", i+1, err)
@@ -67,6 +67,7 @@ func main() {
 
 	legaMqConnString := os.Getenv("LEGA_MQ_CONNECTION")
 	legaMQ, err := dialRabbitMQ(legaMqConnString)
+    failOnError(err, "Failed to connect to LEGA queue after many attempts")
 	legaConsumeChannel, err := legaMQ.Channel()
 	failOnError(err, "Failed to create LEGA consume RabbitMQ channel")
 	legaPublishChannel, err := legaMQ.Channel()
@@ -79,7 +80,7 @@ func main() {
 
 	cegaMqConnString := os.Getenv("CEGA_MQ_CONNECTION")
 	cegaMQ, err := dialRabbitMQ(cegaMqConnString)
-	failOnError(err, "Failed to connect to CEGA RabbitMQ")
+    failOnError(err, "Failed to connect to CEGA queue after many attempts")
 	cegaConsumeChannel, err := cegaMQ.Channel()
 	failOnError(err, "Failed to create CEGA consume RabbitMQ channel")
 	cegaPublishChannel, err := cegaMQ.Channel()
