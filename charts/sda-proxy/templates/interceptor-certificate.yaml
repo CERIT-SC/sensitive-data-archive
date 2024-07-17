@@ -1,0 +1,22 @@
+{{- if .Values.tls.enable }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sda-proxy-interceptor-cert
+  labels:
+    cnpg.io/reload: ""
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sda-proxy-interceptor-cert
+spec:
+  secretName: sda-proxy-interceptor-cert
+  usages:
+    - client auth
+  commonName: sda-proxy-interceptor
+  issuerRef:
+    name: {{ .Values.tls.issuer }}
+    kind: Issuer
+    group: cert-manager.io
+{{- end }}

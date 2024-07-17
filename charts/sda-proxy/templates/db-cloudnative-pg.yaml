@@ -1,0 +1,43 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: sda-proxy-db-cnpg
+spec:
+  instances: 1
+  imageName: 'cerit.io/cloudnative-pg/postgresql:15.0'
+
+  primaryUpdateStrategy: unsupervised
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: sda-proxy-db-cnpg-superuser-secret
+
+  {{- if .Values.tls.enable }}
+  certificates:
+    serverTLSSecret: sda-proxy-db-cnpg-certs
+    serverCASecret: {{ .Values.tls.issuerCaCertSecret }}
+  {{- end }}
+
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1"
+    limits:
+      memory: "4Gi"
+      cpu: "2"
+
+  storage:
+    size: 10Gi
+    storageClass: nfs-csi
+
+  bootstrap:
+    initdb:
+      database: interceptor
+      postInitApplicationSQL:
+      - |
+        CREATE TABLE IF NOT EXISTS mapping
+        (
+            ega_id          VARCHAR NOT NULL,
+            elixir_id       VARCHAR NOT NULL,
+            PRIMARY KEY (ega_id),
+            UNIQUE (ega_id, elixir_id)
+        );

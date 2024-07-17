@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sda-proxy-interceptor
+spec:
+  selector:
+    matchLabels:
+      app: sda-proxy-interceptor
+      release: {{ .Release.Name }}
+
+  template:
+    metadata:
+      labels:
+        app: sda-proxy-interceptor
+        release: {{ .Release.Name }}
+
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+      initContainers:
+
+      - name: init-db-wait
+        image: busybox
+        imagePullPolicy: Always
+
+        securityContext:
+          privileged: false
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+
+        command: ['sh', '-c', 'echo -e "Checking for the availability of PostgreSQL server"; while ! nc -z sda-proxy-db-cnpg-rw 5432; do sleep 1; printf "-"; done; echo -e "  >> PostgreSQL DB started";']
+
+      containers:
+      - name: proxy
+        image:
+        imagePullPolicy: Always
+
+        securityContext:
+          privileged: false
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+
+        env:
+        - name: POSTGRES_CONNECTION
+          value: ""
+        - name: CEGA_MQ_CONNECTION
+          value: ""
+        - name: CEGA_MQ_EXCHANGE
+          value: localega
+        #- name: CEGA_MQ_QUEUE
+        #  value: v1.files
+        - name: CEGA_MQ_QUEUE
+          value: to_fega
+        - name: LEGA_MQ_CONNECTION
+          value: ""
+        - name: LEGA_MQ_EXCHANGE
+          value: sda
+        - name: LEGA_MQ_QUEUE
+          value: files
+        - name: ENABLE_TLS
+          value: "true"
+        - name: VERIFY_CERT
+          value: "true"
+        - name: INTERCEPTOR_CA_CERT # not used yet
+          value: /.secrets/tls/ca.crt
+        - name: INTERCEPTOR_CLIENT_KEY
+          value: /.secrets/tls/tls.key
+        - name: INTERCEPTOR_CLIENT_CERT
+          value: /.secrets/tls/tls.crt
+
+        volumeMounts:
+        - name: interceptor-cert
+          mountPath: /.secrets/tls/ca.crt
+          subPath: ca.crt
+        - name: interceptor-cert
+          mountPath: /.secrets/tls/tls.key
+          subPath: tls.key
+        - name: interceptor-cert
+          mountPath: /.secrets/tls/tls.crt
+          subPath: tls.crt
+
+      volumes:
+      - name: interceptor-cert
+        secret:
+          secretName: sda-proxy-interceptor-cert

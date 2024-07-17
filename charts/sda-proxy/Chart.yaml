@@ -1,0 +1,11 @@
+apiVersion: v2
+name: sda-proxy
+version: 0.0.1
+appVersion: v15.0
+kubeVersion: '>= 1.19.0-0'
+description: CloudNativePG component for LS AAI Proxy for Sensitive Data Archive (SDA)
+home: https://neic-sda.readthedocs.io
+icon: https://neic.no/assets/images/logo.png
+sources:
+- https://github.com/elixir-oslo/NFEGA/wiki
+- https://github.com/neicnordic/sensitive-data-archive
