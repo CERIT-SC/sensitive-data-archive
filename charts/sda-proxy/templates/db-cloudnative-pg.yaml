@@ -31,7 +31,7 @@ spec:
 
   bootstrap:
     initdb:
-      database: interceptor
+      database: {{ .Values.credentials.db.database }}
       postInitApplicationSQL:
       - |
         CREATE TABLE IF NOT EXISTS mapping
