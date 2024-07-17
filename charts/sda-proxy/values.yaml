@@ -1,0 +1,7 @@
+networkPolicy:
+  create: false
+
+tls:
+  enable: true
+  issuer: ""
+  issuerCaCertSecret: ""
