@@ -39,7 +39,7 @@ spec:
 
       containers:
       - name: proxy
-        image:
+        image: "{{ .Values.image.name }}:{{ .Values.image.tag }}"
         imagePullPolicy: Always
 
         securityContext:
@@ -53,9 +53,9 @@ spec:
 
         env:
         - name: POSTGRES_CONNECTION
-          value: ""
+          value: "postgresql://{{ .Values.credentials.db.user }}:{{ .Values.credentials.db.password }}@sda-proxy-db-cnpg-rw:5432/{{ .Values.credentials.db.database }}"
         - name: CEGA_MQ_CONNECTION
-          value: ""
+          value: "amqps://{{ .Values.credentials.cega.user }}:{{ .Values.credentials.cega.password }}@{{ .Values.credentials.cega.host }}:5671/{{ .Values.credentials.cega.vhost }}"
         - name: CEGA_MQ_EXCHANGE
           value: localega
         #- name: CEGA_MQ_QUEUE
@@ -63,7 +63,7 @@ spec:
         - name: CEGA_MQ_QUEUE
           value: to_fega
         - name: LEGA_MQ_CONNECTION
-          value: ""
+          value: "amqps://{{ .Values.credentials.lega.user }}:{{ .Values.credentials.lega.password }}@{{ .Values.credentials.lega.host }}:5671/{{ .Values.credentials.lega.vhost }}"
         - name: LEGA_MQ_EXCHANGE
           value: sda
         - name: LEGA_MQ_QUEUE

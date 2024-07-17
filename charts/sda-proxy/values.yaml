@@ -5,3 +5,23 @@ tls:
   enable: true
   issuer: ""
   issuerCaCertSecret: ""
+
+image:
+  name: ""
+  tag: latest
+
+credentials:
+  db:
+    user: ""
+    password: ""
+    database: interceptor
+  cega:
+    host: ""
+    user: ""
+    password: ""
+    vhost: ""
+  lega:
+    host: sda-mq
+    user: ""
+    password: ""
+    vhost: sda
