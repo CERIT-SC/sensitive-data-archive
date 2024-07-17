@@ -257,6 +257,21 @@ func getTLSConfig() *tls.Config {
 	tlsConfig := tls.Config{}
 	if os.Getenv("VERIFY_CERT") == "true" {
 		tlsConfig.InsecureSkipVerify = false
+
+		certFile := os.Getenv("INTERCEPTOR_CLIENT_CERT")
+		keyFile := os.Getenv("INTERCEPTOR_CLIENT_KEY")
+
+		if certFile == "" || keyFile == "" {
+			log.Fatalf("INTERCEPTOR_CLIENT_CERT and INTERCEPTOR_CLIENT_KEY environment variables must be set")
+		}
+
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			log.Fatalf("Failed to load TLS certificate and key: %v", err)
+		}
+
+		tlsConfig.Certificates = []tls.Certificate{cert}
+
 	} else {
 		tlsConfig.InsecureSkipVerify = true
 	}
