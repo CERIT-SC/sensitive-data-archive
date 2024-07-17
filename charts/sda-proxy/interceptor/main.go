@@ -62,8 +62,18 @@ func main() {
 
 	var err error
 
-	db, err = sql.Open("postgres", os.Getenv("POSTGRES_CONNECTION"))
+	postgresConnString := os.Getenv("POSTGRES_CONNECTION")
+	if postgresConnString == "" {
+		log.Fatalf("Environment variable POSTGRES_CONNECTION is not set")
+	}
+
+	db, err = sql.Open("postgres", postgresConnString)
 	failOnError(err, "Failed to connect to DB")
+	err = db.Ping()
+	if err != nil {
+		log.Fatalf("Failed to ping DB: %v", err)
+	}
+	log.Print("Successfully connected to the database")
 
 	legaMqConnString := os.Getenv("LEGA_MQ_CONNECTION")
 	legaMQ, err := dialRabbitMQ(legaMqConnString)
