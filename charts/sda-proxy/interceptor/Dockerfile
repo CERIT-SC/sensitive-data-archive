@@ -7,14 +7,15 @@ COPY . .
 
 RUN go build
 
-RUN echo "nobody:x:65534:65534:nobody:/:/sbin/nologin" > passwd
+FROM ubuntu:24.04
 
-FROM scratch
+RUN apt update && apt-get install -y ca-certificates
 
-COPY --from=builder /go/passwd /etc/passwd
+WORKDIR /
 
-COPY --from=builder /go/mq-interceptor ./mq-interceptor
+COPY --from=builder /go/mq-interceptor /mq-interceptor
+RUN chmod +x /mq-interceptor
 
-USER 65534
+USER 1000
 
 ENTRYPOINT [ "/mq-interceptor" ]

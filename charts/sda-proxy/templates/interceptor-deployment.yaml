@@ -72,7 +72,7 @@ spec:
           value: "true"
         - name: VERIFY_CERT
           value: "true"
-        - name: INTERCEPTOR_CA_CERT # not used yet
+        - name: INTERCEPTOR_CA_CERT
           value: /.secrets/tls/ca.crt
         - name: INTERCEPTOR_CLIENT_KEY
           value: /.secrets/tls/tls.key
