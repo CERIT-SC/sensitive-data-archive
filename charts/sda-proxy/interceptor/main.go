@@ -78,7 +78,7 @@ func main() {
 
 	legaMqConnString := os.Getenv("LEGA_MQ_CONNECTION")
 	legaMQ, err := dialRabbitMQ(legaMqConnString)
-    failOnError(err, "Failed to connect to LEGA queue after many attempts")
+	failOnError(err, "Failed to connect to LEGA queue after many attempts")
 	legaConsumeChannel, err := legaMQ.Channel()
 	failOnError(err, "Failed to create LEGA consume RabbitMQ channel")
 	legaPublishChannel, err := legaMQ.Channel()
@@ -91,7 +91,7 @@ func main() {
 
 	cegaMqConnString := os.Getenv("CEGA_MQ_CONNECTION")
 	cegaMQ, err := dialRabbitMQ(cegaMqConnString)
-    failOnError(err, "Failed to connect to CEGA queue after many attempts")
+	failOnError(err, "Failed to connect to CEGA queue after many attempts")
 	cegaConsumeChannel, err := cegaMQ.Channel()
 	failOnError(err, "Failed to create CEGA consume RabbitMQ channel")
 	cegaPublishChannel, err := cegaMQ.Channel()
@@ -252,7 +252,17 @@ func selectElixirIdByEGAId(egaId string) (elixirId string, err error) {
 	err = db.QueryRow("select elixir_id from mapping where ega_id = $1", egaId).Scan(&elixirId)
 	if err == nil {
 		log.Printf("Replacing EGA ID [%s] with Elixir ID [%s]", egaId, elixirId)
+		return
 	}
+
+	// Maybe it is already Elixir ID
+	err = db.QueryRow("select elixir_id from mapping where elixir_id = $1", egaId).Scan(&elixirId)
+	if err == nil {
+		log.Printf("Message already contains Elixir ID [%s]", egaId)
+		return
+	}
+
+	log.Printf("Replacing EGA ID [%s] with Elixir ID failed: %v", egaId, err)
 	return
 }
 
@@ -260,7 +270,17 @@ func selectEgaIdByElixirId(elixirId string) (egaId string, err error) {
 	err = db.QueryRow("select ega_id from mapping where elixir_id = $1", elixirId).Scan(&egaId)
 	if err == nil {
 		log.Printf("Replacing Elixir ID [%s] with EGA ID [%s]", elixirId, egaId)
+		return
 	}
+
+	// Maybe it is already EGA ID
+	err = db.QueryRow("select ega_id from mapping where ega_id = $1", elixirId).Scan(&egaId)
+	if err == nil {
+		log.Printf("Message already contains EGA ID [%s]", elixirId)
+		return
+	}
+
+	log.Printf("Replacing Elixir ID [%s] with EGA ID failed: %v", elixirId, err)
 	return
 }
 
