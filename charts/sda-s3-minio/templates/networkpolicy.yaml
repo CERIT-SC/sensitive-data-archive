@@ -11,24 +11,27 @@ spec:
   - Egress
   - Ingress
   egress:
-  - to: # pool to pool
+  - ports: # pool to pool
+    - protocol: TCP
+      port: 9000
+    to:
     - podSelector:
         matchLabels:
           app: sda-s3
-    ports:
-    - protocol: TCP
-      port: 9000
-  - to: # DNS
+  - ports: # DNS
+    - protocol: UDP
+      port: 53
+    to:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: kube-system
       podSelector:
         matchLabels:
           k8s-app: kube-dns
-    ports:
-    - protocol: UDP
-      port: 53
-  - to: # K8s API
+  - ports: # K8s API
+    - port: 6443
+      protocol: TCP
+    to:
     - ipBlock:
         cidr: 10.43.0.1/32
     - ipBlock:
@@ -41,11 +44,13 @@ spec:
         cidr: 10.16.62.17/32
     - ipBlock:
         cidr: 10.16.62.18/32
-    ports:
-    - port: 6443
-      protocol: TCP
   ingress:
-  - ports:
+  - ports: # pool to pool
     - protocol: TCP
       port: 9000
+  {{ if .Values.debug.console.allow }}
+  - ports: # Temporary console debug port
+    - protocol: TCP
+      port: 9443
+  {{- end }}
 {{- end }}

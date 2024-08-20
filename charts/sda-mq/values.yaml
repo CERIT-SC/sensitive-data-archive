@@ -66,6 +66,7 @@ networkPolicy:
         values:
           - sda-svc
           - sda-orch
+          - sda-proxy
 
 ## Persistent Volume Storage Class
 ## If defined, storageClassName: <storageClass>
