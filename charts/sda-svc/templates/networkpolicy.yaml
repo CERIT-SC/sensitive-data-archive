@@ -40,7 +40,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      release : sda-svc
+      release: sda-svc
   policyTypes:
   - Egress
   egress:

@@ -27,7 +27,7 @@ spec:
         matchLabels:
           app.kubernetes.io/name: cloudnative-pg
   egress:
-  - ports:
+  - ports: # K8s API
     - port: 6443
       protocol: TCP
     to:

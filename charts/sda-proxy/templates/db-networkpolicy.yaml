@@ -11,12 +11,14 @@ spec:
   - Ingress
   - Egress
   ingress:
-  - ports:
+  - ports: # Expose database to the interceptor
     - port: 5432
       protocol: TCP
     from:
-    - podSelector: {}
-  - ports:
+    - podSelector:
+        matchLabels:
+          app: sda-proxy-interceptor
+  - ports: # ??
     - port: 8000
       protocol: TCP
     from:
@@ -27,7 +29,7 @@ spec:
         matchLabels:
           app.kubernetes.io/name: cloudnative-pg
   egress:
-  - ports:
+  - ports: # K8s API
     - port: 6443
       protocol: TCP
     to:

@@ -12,26 +12,25 @@ spec:
   - Egress
   - Ingress
   egress:
-  - to: # DNS
+  - ports: # DNS
+    - protocol: UDP
+      port: 53
+    to:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: kube-system
       podSelector:
         matchLabels:
           k8s-app: kube-dns
-    ports:
-    - protocol: UDP
-      port: 53
   - ports: # Connection to CEGA
     - protocol: TCP
       port: 5671
   ingress:
-    - ports:
-      - port: postgres
-      - protocol: TCP
-        port: 5671
-      from:
-      - podSelector:
+  - ports: # RabbitMQ
+    - protocol: TCP
+      port: 5671
+    from:
+    - podSelector:
 {{ .Values.networkPolicy.podSelector | trim | indent 12 }}
 ---
 {{- end }}
