@@ -270,9 +270,11 @@ func getTLSConfig() *tls.Config {
 
 		certFile := os.Getenv("INTERCEPTOR_CLIENT_CERT")
 		keyFile := os.Getenv("INTERCEPTOR_CLIENT_KEY")
+		caCertFile := os.Getenv("INTERCEPTOR_CA_CERT")
 
+		// Load client key pair
 		if certFile == "" || keyFile == "" {
-			log.Fatalf("INTERCEPTOR_CLIENT_CERT and INTERCEPTOR_CLIENT_KEY environment variables must be set")
+			log.Fatalf("INTERCEPTOR_CLIENT_CERT and INTERCEPTOR_CLIENT_KEY environment variables must be set if VERIFY_CERT and ENABLE_TLS are set to true")
 		}
 
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
@@ -282,6 +284,32 @@ func getTLSConfig() *tls.Config {
 
 		tlsConfig.Certificates = []tls.Certificate{cert}
 
+		// Load custom CA certificate
+		if caCertFile != "" {
+			// Load CA certificate file
+			caCert, err := os.ReadFile(caCertFile)
+			if err != nil {
+				log.Fatalf("Failed to read CA certificate: %v", err)
+			}
+
+			// Load system root CAs
+			rootCAs, err := x509.SystemCertPool()
+			if err != nil {
+				log.Fatalf("Failed to load system root CAs: %v", err)
+			}
+			if rootCAs == nil {
+				log.Printf("Skipping system root CAs")
+				rootCAs = x509.NewCertPool()
+			}
+
+			// Append custom CA certificate to the pool
+			if ok := rootCAs.AppendCertsFromPEM(caCert); !ok {
+				log.Fatalf("Failed to append CA certificate to the pool")
+			}
+
+			tlsConfig.RootCAs = rootCAs
+			log.Printf("Custom CA certificate loaded successfully")
+		}
 	} else {
 		tlsConfig.InsecureSkipVerify = true
 	}
