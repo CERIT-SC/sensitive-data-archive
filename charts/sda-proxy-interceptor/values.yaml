@@ -6,7 +6,7 @@ tls:
   issuer: ega-ca-ns-issuer
 
 image:
-  name: ""
+  name: hub.cerit.io/sda/sda-proxy-interceptor
   tag: latest
 
 credentials:
