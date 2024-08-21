@@ -4,4 +4,8 @@ networkPolicy:
 credentials:
   console:
     accessKey: console
-    secretKey: console123
+    secretKey: ""
+
+debug:
+  console:
+    allow: true
