@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sda-proxy-db-cnpg
+  name: sda-proxy-db
 spec:
   podSelector:
     matchLabels:

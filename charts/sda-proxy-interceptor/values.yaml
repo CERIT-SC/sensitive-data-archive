@@ -4,7 +4,6 @@ networkPolicy:
 tls:
   enable: true
   issuer: ega-ca-ns-issuer
-  issuerCaCertSecret: ega-ca-root-secret
 
 image:
   name: ""
