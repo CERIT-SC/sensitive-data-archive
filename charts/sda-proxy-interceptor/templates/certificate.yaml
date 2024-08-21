@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: sda-proxy-interceptor-cert
+  name: sda-proxy-interceptor-cert-secret
   labels:
     cnpg.io/reload: ""
 ---
@@ -11,7 +11,7 @@ kind: Certificate
 metadata:
   name: sda-proxy-interceptor-cert
 spec:
-  secretName: sda-proxy-interceptor-cert
+  secretName: sda-proxy-interceptor-cert-secret
   usages:
     - client auth
   commonName: sda-proxy-interceptor

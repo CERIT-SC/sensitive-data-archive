@@ -9,11 +9,11 @@ spec:
   primaryUpdateStrategy: unsupervised
   enableSuperuserAccess: true
   superuserSecret:
-    name: sda-proxy-db-cnpg-superuser-secret
+    name: sda-proxy-db-superuser-secret
 
   {{- if .Values.tls.enable }}
   certificates:
-    serverTLSSecret: sda-proxy-db-cnpg-certs
+    serverTLSSecret: sda-proxy-db-cert-secret
     serverCASecret: {{ .Values.tls.issuerCaCertSecret }}
   {{- end }}
 
@@ -31,7 +31,7 @@ spec:
 
   bootstrap:
     initdb:
-      database: {{ .Values.credentials.db.database }}
+      database: {{ .Values.db.database }}
       postInitApplicationSQL:
       - |
         CREATE TABLE IF NOT EXISTS mapping

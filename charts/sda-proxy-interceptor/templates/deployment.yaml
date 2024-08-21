@@ -93,4 +93,4 @@ spec:
       volumes:
       - name: interceptor-cert
         secret:
-          secretName: sda-proxy-interceptor-cert
+          secretName: sda-proxy-interceptor-cert-secret

@@ -2,16 +2,16 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: sda-proxy-db-cnpg-certs
+  name: sda-proxy-db-cert-secret
   labels:
     cnpg.io/reload: ""
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: sda-proxy-db-cnpg-certs
+  name: sda-proxy-db-cert
 spec:
-  secretName: sda-proxy-db-cnpg-certs
+  secretName: sda-proxy-db-cert-secret
   usages:
     - server auth
   dnsNames:
