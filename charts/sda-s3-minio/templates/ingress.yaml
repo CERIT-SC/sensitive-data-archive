@@ -1,0 +1,26 @@
+{{ if .Values.debug.console.allow }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sda-s3-console-ingress
+  annotations:
+    kuberentes.io/ingress.class: "nginx"
+    kubernetes.io/tls-acme: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - "s3console.ega-ns.dyn.cloud.e-infra.cz"
+      secretName: s3console-ega-ns-dyn-cloud-e-infra-cz-tls
+  rules:
+  - host: "s3console.ega-ns.dyn.cloud.e-infra.cz"
+    http:
+      paths:
+      - backend:
+          service:
+            name: sda-s3-console
+            port:
+              number: 9443
+        pathType: ImplementationSpecific
+{{ end }}
