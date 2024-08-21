@@ -1,0 +1,34 @@
+{{- if .Values.networkPolicy.create }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sda-proxy-interceptor
+spec:
+  podSelector:
+    matchLabels:
+      app: sda-proxy-interceptor
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - ports: # RabbitMQ
+    - protocol: TCP
+      port: 5671
+  - ports: # DNS
+    - protocol: UDP
+      port: 53
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  - ports: # Connect to the interceptor database
+    - port: 5432
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          cnpg.io/cluster: sda-proxy-db-cnpg
+{{- end }}
