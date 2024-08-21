@@ -115,6 +115,24 @@ spec:
           protocol: TCP
         - containerPort: {{ ternary 5671 5672 (.Values.global.tls.enabled )}}
           name: amqp
+        livenessProbe:
+          exec:
+            command:
+              - /bin/bash
+              - -ec
+              - rabbitmq-diagnostics -q ping
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 9
+        readinessProbe:
+          exec:
+            command:
+              - /bin/bash
+              - -ec
+              - rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_local_alarms
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 9
         volumeMounts:
         - name: data
           mountPath: "/var/lib/rabbitmq/"
