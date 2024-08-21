@@ -8,4 +8,4 @@ credentials:
 
 debug:
   console:
-    allow: true
+    allow: false
