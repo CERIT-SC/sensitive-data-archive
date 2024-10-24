@@ -118,6 +118,8 @@ spec:
         command: ["/bin/sh"]
         args: ["-c", "source {{ include "secretsPath" . }}/{{ .Values.global.doa.envFile }} && docker-entrypoint.sh && java -jar /localega-doa.jar"]
       {{- end }}
+        command: ["/bin/sh"]
+        args: ["-c", "java -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Djavax.net.ssl.trustStorePassword=\"$KEYSTORE_PASSWORD\" -jar /localega-doa.jar"]
         env:
         - name: SPRING_PROFILES_ACTIVE
           value: no-oss,LocalEGA
