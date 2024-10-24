@@ -2,11 +2,11 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: sda-s3
+  name: {{ .Release.Name }}
 spec:
   podSelector:
     matchLabels:
-      app: sda-s3
+      app: {{ .Release.Name }}
   policyTypes:
   - Egress
   - Ingress
@@ -17,7 +17,7 @@ spec:
     to:
     - podSelector:
         matchLabels:
-          app: sda-s3
+          app: {{ .Release.Name }}
   - ports: # DNS
     - protocol: UDP
       port: 53

@@ -2,9 +2,17 @@ networkPolicy:
   create: true
 
 credentials:
+  minioRoot:
+    user: minio
+    password: ""
   console:
     accessKey: console
     secretKey: ""
+
+storage:
+  size: 1Ti
+  className: nfs-csi
+
 
 debug:
   console:

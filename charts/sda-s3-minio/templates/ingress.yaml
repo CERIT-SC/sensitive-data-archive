@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: sda-s3-console-ingress
+  name: {{ .Release.Name }}-console-ingress
   annotations:
     kuberentes.io/ingress.class: "nginx"
     kubernetes.io/tls-acme: "true"
@@ -11,15 +11,15 @@ metadata:
 spec:
   tls:
     - hosts:
-        - "s3console.ega-ns.dyn.cloud.e-infra.cz"
-      secretName: s3console-ega-ns-dyn-cloud-e-infra-cz-tls
+        - "{{ .Release.Name }}-console.ega-ns.dyn.cloud.e-infra.cz"
+      secretName: {{ .Release.Name }}-console-ega-ns-dyn-cloud-e-infra-cz-tls
   rules:
-  - host: "s3console.ega-ns.dyn.cloud.e-infra.cz"
+  - host: "{{ .Release.Name }}-console.ega-ns.dyn.cloud.e-infra.cz"
     http:
       paths:
       - backend:
           service:
-            name: sda-s3-console
+            name: {{ .Release.Name }}-console
             port:
               number: 9443
         pathType: ImplementationSpecific
