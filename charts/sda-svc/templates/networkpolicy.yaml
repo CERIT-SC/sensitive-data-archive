@@ -16,19 +16,23 @@ metadata:
   name: allow-dns-access
   namespace: {{ .Release.Namespace }}
 spec:
-  podSelector: {}
+  podSelector:
+    matchLabels:
+      release: sda-svc
   policyTypes:
   - Egress
   egress:
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-      podSelector:
-        matchLabels:
-          k8s-app: kube-dns
+#  - to:
+#    - namespaceSelector:
+#        matchLabels:
+#          kubernetes.io/metadata.name: kube-system
+#      podSelector:
+#        matchLabels:
+#          k8s-app: kube-dns
     ports:
     - protocol: UDP
+      port: 53
+    - protocol: TCP
       port: 53
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 ---
