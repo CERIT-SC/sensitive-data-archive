@@ -7,26 +7,26 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	_ "github.com/lib/pq"
-	amqp "github.com/rabbitmq/amqp091-go"
 	"log"
 	"net/url"
 	"os"
 	"sync"
 	"time"
+
+	_ "github.com/lib/pq"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // This interface serves as the supertype for both amqp.Channel and the MockChannel used for testing
 type MQChannel interface {
-        Ack(tag uint64, multiple bool) error
-        Nack(tag uint64, multiple bool, requeue bool) error
-        Reject(tag uint64, requeue bool) error
-        Publish(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error
+	Ack(tag uint64, multiple bool) error
+	Nack(tag uint64, multiple bool, requeue bool) error
+	Reject(tag uint64, requeue bool) error
+	Publish(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error
 }
 
 var db *sql.DB
 var publishMutex sync.Mutex
-
 
 // dialRabbitMQ attempts to connect to RabbitMQ up to 10 times
 // with a delay between retries. It returns a connection
@@ -155,7 +155,19 @@ func main() {
 func forwardDeliveryTo(fromCEGAToLEGA bool, channelFrom MQChannel, channelTo MQChannel, errorChannel MQChannel, exchange string, routingKey string, delivery amqp.Delivery) {
 	publishMutex.Lock()
 	defer publishMutex.Unlock()
+	log.Print("Message info:")
+	log.Print("|---------------")
+	if fromCEGAToLEGA {
+		log.Print("|- From CEGA to LEGA")
+	} else {
+		log.Print("|- From LEGA to CEGA")
+	}
+	log.Printf("|- Forwarded message from exchange: %s, key: %s", delivery.Exchange, delivery.RoutingKey)
+	log.Printf("|- Forwarded message to exchange: %s, key: %s", exchange, routingKey)
+	log.Printf("|- Correlation ID: %s", delivery.CorrelationId)
+	log.Printf("|- Message body: %s", string(delivery.Body))
 	publishing, messageType, err := buildPublishingFromDelivery(fromCEGAToLEGA, delivery)
+	log.Printf("publishing: %s", publishing)
 	if err != nil {
 		log.Printf("%s", err)
 		nackError := channelFrom.Nack(delivery.DeliveryTag, false, false)
@@ -164,6 +176,7 @@ func forwardDeliveryTo(fromCEGAToLEGA bool, channelFrom MQChannel, channelTo MQC
 		failOnError(err, "Failed to publish error message")
 		return
 	}
+	log.Printf("messageType: %s", messageType)
 	// Forward all messages from CEGA to a local queue handled by the SDA intercept service
 	if fromCEGAToLEGA {
 		routingKey = os.Getenv("LEGA_MQ_QUEUE")
@@ -178,9 +191,6 @@ func forwardDeliveryTo(fromCEGAToLEGA bool, channelFrom MQChannel, channelTo MQC
 	} else {
 		err = channelFrom.Ack(delivery.DeliveryTag, false)
 		failOnError(err, "Failed to Ack message")
-		log.Printf("Forwarded message from [%s, %s] to [%s, %s]", delivery.Exchange, delivery.RoutingKey, exchange, routingKey)
-		log.Printf("Correlation ID: %s", delivery.CorrelationId)
-		log.Printf("Message: %s", string(delivery.Body))
 	}
 }
 
@@ -219,12 +229,14 @@ func buildPublishingFromDelivery(fromCEGAToLEGA bool, delivery amqp.Delivery) (*
 
 	if fromCEGAToLEGA {
 		elixirId, err := selectElixirIdByEGAId(stringUser)
+		log.Printf("Found ElixirID: %s", elixirId)
 		if err != nil {
 			return nil, "", err
 		}
 		message["user"] = elixirId
 	} else {
 		egaId, err := selectEgaIdByElixirId(stringUser)
+		log.Printf("Found EgaID: %s", egaId)
 		if err != nil {
 			return nil, "", err
 		}
